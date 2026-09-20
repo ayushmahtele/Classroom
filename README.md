@@ -7,7 +7,7 @@ computer, anywhere, can log into.
 
 ```
 Admin (anywhere) ──┐
-Teacher (anywhere) ─┼──► https://yourapp.com ──► Node/Express API ──► db.json (or MongoDB)
+Teacher (anywhere) ─┼──► https://classroom-bv1z.onrender.com ──► Node/Express API ──► db.json (or MongoDB)
 Student (anywhere) ─┘                                   │
                                                     uploads/evidence (proctoring snapshots)
 ```
