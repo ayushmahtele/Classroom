@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Classroom — Teacher</title>
+<link rel="icon" type="image/png" href="img/favicon-32.png" />
+<link rel="shortcut icon" href="favicon.ico" />
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
+<meta name="theme-color" content="#bd0e0e" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar">
+    <div class="brand"><img src="img/logo.png" alt="" />Class<span>room</span></div>
+    <nav>
+      <button class="nav-btn active" data-view="classes">🏫 Classes</button>
+      <button class="nav-btn" data-view="students">🎓 Students</button>
+      <button class="nav-btn" data-view="quizzes">📝 Quizzes</button>
+      <button class="nav-btn" data-view="results">📈 Results</button>
+      <button class="nav-btn" data-view="attendance">🗓 Attendance</button>
+      <button class="nav-btn" data-view="proctoring">🛡 Proctoring Reports</button>
+      <button class="nav-btn" data-view="live">🔴 Live Monitor</button>
+      <button class="nav-btn" data-view="profile">👤 My Profile</button>
+    </nav>
+    <div style="margin-top:30px" class="who" id="whoBox"></div>
+    <button class="nav-btn logout" onclick="logout()">🚪 Log out</button>
+  </div>
+
+  <div class="main">
+    <!-- Classes -->
+    <section id="view-classes">
+      <div class="topbar"><h2 style="margin:0">Classes</h2><button class="btn" onclick="openNewClass()">+ New Class</button></div>
+      <div id="classList" class="two-col"></div>
+    </section>
+
+    <!-- Students -->
+    <section id="view-students" style="display:none">
+      <div class="topbar"><h2 style="margin:0">Students</h2><button class="btn" onclick="openAddStudent()">+ Add Student</button></div>
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Login ID</th><th>Roll No.</th><th>Domain</th><th>Classes</th><th></th></tr></thead>
+        <tbody id="studentRows"></tbody>
+      </table>
+    </section>
+
+    <!-- Quizzes -->
+    <section id="view-quizzes" style="display:none">
+      <div class="topbar"><h2 style="margin:0">Quizzes</h2><button class="btn" onclick="openNewQuiz()">+ New Quiz</button></div>
+      <table>
+        <thead><tr><th>Title</th><th>Class</th><th>Questions</th><th>Duration</th><th>Status</th><th></th></tr></thead>
+        <tbody id="quizRows"></tbody>
+      </table>
+    </section>
+
+    <!-- Results -->
+    <section id="view-results" style="display:none">
+      <h2>Results</h2>
+      <label>Choose a quiz</label>
+      <select id="resultsQuizSelect" style="max-width:360px"></select>
+      <table style="margin-top:16px">
+        <thead><tr><th>Student</th><th>Roll No.</th><th>Score</th><th>Status</th><th>Tab switches</th><th>Fullscreen exits</th><th>Alerts</th></tr></thead>
+        <tbody id="resultRows"></tbody>
+      </table>
+    </section>
+
+    <!-- Attendance -->
+    <section id="view-attendance" style="display:none">
+      <h2>Attendance</h2>
+      <div class="row">
+        <select id="attClassSelect"></select>
+        <input id="attDate" type="date" />
+        <button class="btn" onclick="loadAttendanceSheet()">Load class</button>
+      </div>
+      <table style="margin-top:16px">
+        <thead><tr><th>Student</th><th>Status</th></tr></thead>
+        <tbody id="attRows"></tbody>
+      </table>
+      <button class="btn" style="margin-top:14px" onclick="submitAttendance()">Save attendance</button>
+      <h3 style="margin-top:30px">History</h3>
+      <table>
+        <thead><tr><th>Date</th><th>Student</th><th>Status</th></tr></thead>
+        <tbody id="attHistoryRows"></tbody>
+      </table>
+    </section>
+
+    <!-- Proctoring reports -->
+    <section id="view-proctoring" style="display:none">
+      <h2>Proctoring Reports</h2>
+      <label>Filter by quiz</label>
+      <select id="proctorQuizSelect" style="max-width:360px"></select>
+      <table style="margin-top:16px">
+        <thead><tr><th>Time</th><th>Student</th><th>Event</th><th>Confidence</th><th>Evidence</th></tr></thead>
+        <tbody id="proctorRows"></tbody>
+      </table>
+    </section>
+
+    <!-- Profile -->
+    <section id="view-profile" style="display:none">
+      <h2>My Profile</h2>
+      <div id="profileBox"></div>
+    </section>
+
+    <!-- Live monitor -->
+    <section id="view-live" style="display:none">
+      <h2>Live Monitor</h2>
+      <label>Watch a quiz live</label>
+      <select id="liveQuizSelect" style="max-width:360px"></select>
+      <div class="live-grid" id="liveGrid" style="margin-top:16px"></div>
+    </section>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-backdrop" id="modalNewClass" style="display:none">
+  <div class="modal">
+    <h3>New Class</h3>
+    <label>Class name</label>
+    <input id="newClassName" placeholder="e.g. CS-301 Data Structures" />
+    <div class="row" style="margin-top:16px">
+      <button class="btn" onclick="createClass()">Create</button>
+      <button class="btn secondary" onclick="closeModal('modalNewClass')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalAddStudent" style="display:none">
+  <div class="modal">
+    <h3>Add Student</h3>
+    <form id="addStudentForm">
+      <label>Full name</label><input id="sName" required />
+      <label>Email</label><input id="sEmail" type="email" required />
+      <label>Student domain</label>
+      <select id="sDept" required></select>
+      <p style="color:var(--muted);font-size:12px;margin:8px 0 0">Roll number is generated automatically.</p>
+
+      <label>Add this student to</label>
+      <div class="radio-group">
+        <label class="check-item"><input type="radio" name="sAssign" value="me" checked /> Only me</label>
+        <label class="check-item"><input type="radio" name="sAssign" value="domain" /> <span>All teachers of my domain <small id="sMyDomains"></small></span></label>
+        <label class="check-item"><input type="radio" name="sAssign" value="all" /> All teachers (any department)</label>
+      </div>
+
+      <label>Also put the student in my class</label>
+      <div class="radio-group">
+        <label class="check-item"><input type="radio" name="sClassMode" value="none" checked /> No class for now</label>
+        <label class="check-item"><input type="radio" name="sClassMode" value="selected" /> One or more selected classes</label>
+        <label class="check-item"><input type="radio" name="sClassMode" value="all" /> All my classes</label>
+      </div>
+      <div id="sClassPicker" style="display:none">
+        <div class="check-list scroll" id="sClassList"></div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn" type="submit">Create student account</button>
+        <button class="btn secondary" type="button" onclick="closeModal('modalAddStudent')">Cancel</button>
+      </div>
+      <div class="error-msg" id="addStudentError"></div>
+    </form>
+    <div id="studentCredsResult"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalStudentClasses" style="display:none">
+  <div class="modal">
+    <h3>Add student to classes</h3>
+    <p id="scStudentName" style="color:var(--muted);font-size:13px;margin-top:0"></p>
+    <div class="radio-group">
+      <label class="check-item"><input type="radio" name="scMode" value="selected" checked /> One or more selected classes</label>
+      <label class="check-item"><input type="radio" name="scMode" value="all" /> All my classes</label>
+    </div>
+    <div id="scPicker"><div class="check-list scroll" id="scClassList"></div></div>
+    <div class="row" style="margin-top:16px">
+      <button class="btn" onclick="saveStudentClasses()">Add</button>
+      <button class="btn secondary" onclick="closeModal('modalStudentClasses')">Cancel</button>
+    </div>
+    <div class="error-msg" id="scError"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalEnroll" style="display:none">
+  <div class="modal">
+    <h3>Enroll Students</h3>
+    <div id="enrollList"></div>
+    <button class="btn full" onclick="closeModal('modalEnroll'); loadClasses();">Done</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalNewQuiz" style="display:none">
+  <div class="modal" style="max-width:720px">
+    <h3 id="quizModalTitle">New Quiz</h3>
+    <div id="editQuizWarning" class="error-msg" style="display:none;margin-bottom:10px"></div>
+    <label>Class</label>
+    <select id="qClass"></select>
+    <label>Title</label>
+    <input id="qTitle" />
+    <label>Description</label>
+    <textarea id="qDesc" rows="2"></textarea>
+    <div class="row">
+      <div style="flex:1"><label>Duration (minutes)</label><input id="qDuration" type="number" value="30" /></div>
+      <div style="flex:1"><label>Negative marking?</label>
+        <select id="qNegative"><option value="false">No</option><option value="true">Yes (-25% per wrong)</option></select>
+      </div>
+    </div>
+    <label>Looking-away strictness (proctoring)</label>
+    <select id="qLookAway">
+      <option value="low">Low - flags only after a long, clear head turn (~3s)</option>
+      <option value="medium" selected>Medium - flags a noticeable head turn (~1.5s)</option>
+      <option value="high">High - flags even a slight head turn almost instantly (~0.5s)</option>
+    </select>
+    <div class="row">
+      <div style="flex:1"><label>Opens at (optional)</label><input id="qStart" type="datetime-local" /></div>
+      <div style="flex:1"><label>Closes at (optional)</label><input id="qEnd" type="datetime-local" /></div>
+    </div>
+
+    <h4>Questions</h4>
+    <div id="questionsContainer"></div>
+    <button class="btn secondary" type="button" onclick="addQuestionBlock()">+ Add Question</button>
+
+    <div class="row" style="margin-top:20px">
+      <!-- creating a new quiz -->
+      <button class="btn" id="btnPublishQuiz" onclick="createQuiz(true)">Publish quiz</button>
+      <button class="btn secondary" id="btnDraftQuiz" onclick="createQuiz(false)">Save as draft</button>
+      <!-- editing an existing quiz -->
+      <button class="btn" id="btnSaveEdit" style="display:none" onclick="saveQuizEdit()">Save changes</button>
+      <button class="btn secondary" onclick="closeModal('modalNewQuiz')">Cancel</button>
+    </div>
+    <div class="error-msg" id="newQuizError"></div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/dist/socket.io.min.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/teacher.js"></script>
+</body>
+</html>

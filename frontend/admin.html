@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Classroom — Admin</title>
+<link rel="icon" type="image/png" href="img/favicon-32.png" />
+<link rel="shortcut icon" href="favicon.ico" />
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
+<meta name="theme-color" content="#bd0e0e" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar">
+    <div class="brand"><img src="img/logo.png" alt="" />Class<span>room</span></div>
+    <nav>
+      <button class="nav-btn active" data-view="overview">📊 Overview</button>
+      <button class="nav-btn" data-view="teachers">🧑‍🏫 Teachers</button>
+      <button class="nav-btn" data-view="students">🎓 All Students</button>
+      <button class="nav-btn" data-view="restore">♻️ Restore Data</button>
+      <button class="nav-btn" data-view="delete">🗑 Delete Data</button>
+    </nav>
+    <div style="margin-top:40px" class="who" id="whoBox"></div>
+    <button class="nav-btn logout" onclick="logout()">🚪 Log out</button>
+  </div>
+
+  <div class="main">
+    <!-- Overview -->
+    <section id="view-overview">
+      <h2>Platform Overview</h2>
+      <div class="grid-stats" id="statsGrid"></div>
+      <div class="panel">
+        <h3>How adding a teacher works</h3>
+        <p style="color:var(--muted);font-size:14px">
+          Click <b>Teachers → + Add Teacher</b>, enter their name, email and pick their department(s) (CSE, IT, ECE, CIVIL).
+          The platform creates their account instantly with a temporary password and a
+          Teacher ID (e.g. <code>TCH1024</code>). Share those credentials with the teacher
+          however you like (email, WhatsApp, in person) — they can then log in from any
+          computer, anywhere, and will be asked to set their own password on first login.
+        </p>
+      </div>
+    </section>
+
+    <!-- Teachers -->
+    <section id="view-teachers" style="display:none">
+      <div class="topbar">
+        <h2 style="margin:0">Teachers</h2>
+        <button class="btn" onclick="openAddTeacher()">+ Add Teacher</button>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Login ID</th><th>Department</th><th>Status</th><th></th></tr></thead>
+        <tbody id="teacherRows"></tbody>
+      </table>
+    </section>
+
+    <!-- Students -->
+    <section id="view-students" style="display:none">
+      <div class="topbar">
+        <h2 style="margin:0">All Students</h2>
+        <button class="btn" onclick="openAddStudent()">+ Add Student</button>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Login ID</th><th>Roll No.</th><th>Domain</th><th>Teachers</th><th></th></tr></thead>
+        <tbody id="studentRows"></tbody>
+      </table>
+    </section>
+
+    <!-- Restore data -->
+    <section id="view-restore" style="display:none">
+      <h2>♻️ Restore Data</h2>
+      <p style="color:var(--muted);font-size:14px;margin-top:-6px">
+        Bring back classes, quizzes (with their results and proctoring alerts) and proctoring images
+        that were deleted by a teacher or by the admin.
+      </p>
+      <div class="panel">
+        <label>Restore data of</label>
+        <div class="radio-group">
+          <label class="check-item"><input type="radio" name="rScope" value="all" checked /> All teachers</label>
+          <label class="check-item"><input type="radio" name="rScope" value="selected" /> Selected teacher(s)</label>
+          <label class="check-item"><input type="radio" name="rScope" value="admin" /> <span>Admin's removals <small>(students and teachers removed by the admin)</small></span></label>
+        </div>
+        <div id="rTeacherBox" style="display:none">
+          <div class="check-list scroll" id="rTeacherList"></div>
+        </div>
+        <label>Deleted within</label>
+        <select id="rRange"></select>
+        <div class="row" style="margin-top:16px">
+          <button class="btn" onclick="showTrash()">Show deleted items</button>
+        </div>
+      </div>
+      <div id="rResult"></div>
+    </section>
+
+    <!-- Delete data -->
+    <section id="view-delete" style="display:none">
+      <h2>🗑 Delete Data</h2>
+      <p style="color:var(--muted);font-size:14px;margin-top:-6px">
+        Delete teachers' data by time range. Deleted data goes to the recycle bin, so you can bring it back
+        from <b>Restore Data</b> (unless you tick permanent delete). Teacher and student accounts are never deleted here.
+      </p>
+      <div class="panel">
+        <label>Delete data of</label>
+        <div class="radio-group">
+          <label class="check-item"><input type="radio" name="dScope" value="all" checked /> All teachers</label>
+          <label class="check-item"><input type="radio" name="dScope" value="selected" /> Selected teacher(s)</label>
+        </div>
+        <div id="dTeacherBox" style="display:none">
+          <div class="check-list scroll" id="dTeacherList"></div>
+        </div>
+        <label>Created within</label>
+        <select id="dRange"></select>
+        <label>What to delete</label>
+        <div class="check-list">
+          <label class="check-item"><input type="checkbox" id="dCatClasses" checked /> Classes <small>(with their attendance, quizzes, results and proctoring data)</small></label>
+          <label class="check-item"><input type="checkbox" id="dCatQuizzes" checked /> Quizzes <small>(with results, proctoring alerts and images)</small></label>
+          <label class="check-item"><input type="checkbox" id="dCatImages" checked /> Proctoring images only <small>(the alerts stay in the reports)</small></label>
+        </div>
+        <label class="check-item" style="margin-top:14px;color:var(--danger)"><input type="checkbox" id="dPermanent" /> Delete permanently — cannot be restored</label>
+        <div class="row" style="margin-top:16px">
+          <button class="btn secondary" onclick="previewDelete()">Preview what will be deleted</button>
+        </div>
+      </div>
+      <div id="dResult"></div>
+    </section>
+
+  </div>
+</div>
+
+<div class="modal-backdrop" id="addTeacherModal" style="display:none">
+  <div class="modal">
+    <h3>Add Teacher</h3>
+    <form id="addTeacherForm">
+      <label>Full name</label>
+      <input id="tName" required />
+      <label>Email</label>
+      <input id="tEmail" type="email" required />
+      <label>Department(s) — pick one or more</label>
+      <div class="check-list inline" id="tDeptList">
+        <label class="check-item"><input type="checkbox" value="CSE" /> CSE</label>
+        <label class="check-item"><input type="checkbox" value="IT" /> IT</label>
+        <label class="check-item"><input type="checkbox" value="ECE" /> ECE</label>
+        <label class="check-item"><input type="checkbox" value="CIVIL" /> CIVIL</label>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn" type="submit">Create teacher account</button>
+        <button class="btn secondary" type="button" onclick="closeAddTeacher()">Cancel</button>
+      </div>
+      <div class="error-msg" id="addTeacherError"></div>
+    </form>
+    <div id="credsResult"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="addStudentModal" style="display:none">
+  <div class="modal">
+    <h3>Add Student</h3>
+    <form id="addStudentForm">
+      <label>Full name</label>
+      <input id="sName" required />
+      <label>Email</label>
+      <input id="sEmail" type="email" required />
+      <label>Student domain</label>
+      <select id="sDept" required>
+        <option value="">Select domain…</option>
+        <option value="CSE">CSE</option>
+        <option value="IT">IT</option>
+        <option value="ECE">ECE</option>
+        <option value="CIVIL">CIVIL</option>
+      </select>
+      <p style="color:var(--muted);font-size:12px;margin:8px 0 0">Roll number is generated automatically.</p>
+
+      <label>Add this student to</label>
+      <div class="radio-group">
+        <label class="check-item"><input type="radio" name="sMode" value="selected" checked /> Selected teachers</label>
+        <label class="check-item"><input type="radio" name="sMode" value="domain" /> <span>All teachers of the student's domain <small id="sDomainHint"></small></span></label>
+        <label class="check-item"><input type="radio" name="sMode" value="all" /> All teachers (any department)</label>
+      </div>
+      <div id="sTeacherPicker">
+        <label>Choose teachers</label>
+        <div class="check-list scroll" id="sTeacherList"></div>
+      </div>
+
+      <div class="row" style="margin-top:16px">
+        <button class="btn" type="submit">Create student account</button>
+        <button class="btn secondary" type="button" onclick="closeAddStudent()">Cancel</button>
+      </div>
+      <div class="error-msg" id="addStudentError"></div>
+    </form>
+    <div id="studentCredsResult"></div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

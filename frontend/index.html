@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Classroom — Sign in</title>
+<link rel="icon" type="image/png" href="img/favicon-32.png" />
+<link rel="shortcut icon" href="favicon.ico" />
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
+<meta name="theme-color" content="#bd0e0e" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="center-screen">
+  <div class="card login-card">
+    <div class="login-logo"><img src="img/logo.png" alt="Classroom logo" /></div>
+    <h1 class="login-title">Classroom</h1>
+    <p class="sub center">Smart proctored quizzes — sign in from any device, anywhere.</p>
+
+    <div class="role-tabs">
+      <button class="active" data-role="student">Student</button>
+      <button data-role="teacher">Teacher</button>
+      <button data-role="admin">Admin</button>
+    </div>
+
+    <form id="loginForm">
+      <label id="loginIdLabel">Student ID or Email</label>
+      <input id="loginId" type="text" placeholder="e.g. STU2048 or you@email.com" required />
+
+      <label>Password</label>
+      <input id="password" type="password" placeholder="••••••••" required />
+
+      <button class="btn full" type="submit">Sign in</button>
+      <div class="error-msg" id="errorMsg"></div>
+    </form>
+    <p class="hint">Forgot your password? <a href="#" id="forgotLink">Request a reset</a> — your teacher/admin will give you a new temporary password.</p>
+    <div id="forgotMsg" style="font-size:13px;margin-top:6px"></div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+let role = 'student';
+const labels = { student: 'Student ID or Email', teacher: 'Teacher ID or Email', admin: 'Admin ID or Email' };
+
+document.querySelectorAll('.role-tabs button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.role-tabs button').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    role = btn.dataset.role;
+    document.getElementById('loginIdLabel').textContent = labels[role];
+    document.getElementById('errorMsg').textContent = '';
+  });
+});
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const loginId = document.getElementById('loginId').value.trim();
+  const password = document.getElementById('password').value;
+  const errorMsg = document.getElementById('errorMsg');
+  errorMsg.textContent = '';
+
+  try {
+    const data = await api('/auth/login', { method: 'POST', body: { loginId, password } });
+    if (data.user.role !== role) {
+      errorMsg.textContent = `That account is registered as ${data.user.role}, not ${role}. Choose the right tab.`;
+      return;
+    }
+    Session.token = data.token;
+    Session.user = data.user;
+    if (data.mustChangePassword) {
+      window.location.href = 'change-password.html';
+      return;
+    }
+    window.location.href = `${data.user.role}.html`;
+  } catch (err) {
+    errorMsg.textContent = err.message;
+  }
+});
+
+document.getElementById('forgotLink').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const out = document.getElementById('forgotMsg');
+  const loginId = document.getElementById('loginId').value.trim();
+  if (!loginId) { out.style.color = ''; out.textContent = 'Enter your ID or email above first.'; return; }
+  try {
+    const r = await api('/auth/forgot-password', { method: 'POST', body: { loginId } });
+    out.style.color = 'green';
+    out.textContent = r.message;
+  } catch (err) { out.style.color = ''; out.textContent = err.message; }
+});
+</script>
+</body>
+</html>

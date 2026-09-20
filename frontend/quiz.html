@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Classroom — Quiz</title>
+<link rel="icon" type="image/png" href="img/favicon-32.png" />
+<link rel="shortcut icon" href="favicon.ico" />
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
+<meta name="theme-color" content="#bd0e0e" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- Pre-check screen: camera + fullscreen consent before the quiz starts -->
+<div class="center-screen" id="preCheckScreen">
+  <div class="card login-card" style="max-width:480px">
+    <h1>🛡 Proctoring check</h1>
+    <p class="sub">Before you start, we need camera access and fullscreen mode. This quiz is AI-proctored: your camera feed is analyzed on your own device (nothing is streamed anywhere) and only suspicious moments are reported to your teacher, with a snapshot as evidence.</p>
+    <ul style="font-size:13px;color:var(--muted);line-height:1.7">
+      <li>Sit facing your camera, alone, in good lighting</li>
+      <li>Keep your face visible for the whole quiz</li>
+      <li>Don't switch tabs or exit fullscreen</li>
+      <li>No phones or notes in view</li>
+    </ul>
+    <video id="preCheckVideo" autoplay muted playsinline style="width:100%;border-radius:10px;background:#000;margin:10px 0"></video>
+    <div class="error-msg" id="preCheckError"></div>
+    <button class="btn full" id="startBtn" onclick="beginQuiz()" disabled>Preparing…</button>
+  </div>
+</div>
+
+<!-- Main quiz UI -->
+<div class="quiz-shell" id="quizShell" style="display:none">
+  <div class="quiz-main">
+    <div class="row between">
+      <h2 id="quizTitle">Quiz</h2>
+      <div class="timer" id="timerDisplay">--:--</div>
+    </div>
+    <div class="question-nav" id="questionNav"></div>
+    <div id="questionArea"></div>
+    <div class="row between" style="margin-top:20px">
+      <button class="btn secondary" onclick="prevQuestion()">← Previous</button>
+      <button class="btn secondary" onclick="nextQuestion()">Next →</button>
+      <button class="btn danger" onclick="confirmSubmit()">Submit Quiz</button>
+    </div>
+  </div>
+  <div class="quiz-side">
+    <video id="proctorVideo" autoplay muted playsinline></video>
+    <div class="cam-status ok" id="camStatus">Camera active</div>
+    <div style="font-size:12px;text-align:center;margin-top:6px;color:#8892b0">Proctoring Log</div>
+    <div class="proctor-log" id="proctorLog"></div>
+  </div>
+</div>
+
+<canvas id="captureCanvas" style="display:none"></canvas>
+
+<script src="js/api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+<script>window.tf = faceapi.tf;</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+<script src="js/proctor.js"></script>
+<script src="js/quiz.js"></script>
+</body>
+</html>

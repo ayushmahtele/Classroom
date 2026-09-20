@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Classroom — Student</title>
+<link rel="icon" type="image/png" href="img/favicon-32.png" />
+<link rel="shortcut icon" href="favicon.ico" />
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
+<meta name="theme-color" content="#bd0e0e" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar">
+    <div class="brand"><img src="img/logo.png" alt="" />Class<span>room</span></div>
+    <nav>
+      <button class="nav-btn active" data-view="quizzes">📝 My Quizzes</button>
+      <button class="nav-btn" data-view="results">📈 My Results</button>
+      <button class="nav-btn" data-view="attendance">🗓 My Attendance</button>
+      <button class="nav-btn" data-view="profile">👤 My Profile</button>
+    </nav>
+    <div style="margin-top:30px" class="who" id="whoBox"></div>
+    <button class="nav-btn logout" onclick="logout()">🚪 Log out</button>
+  </div>
+
+  <div class="main">
+    <section id="view-quizzes">
+      <h2>My Quizzes</h2>
+      <div id="quizList" class="two-col"></div>
+    </section>
+
+    <section id="view-results" style="display:none">
+      <h2>My Results</h2>
+      <table>
+        <thead><tr><th>Quiz</th><th>Score</th><th>Status</th><th>Submitted</th></tr></thead>
+        <tbody id="resultRows"></tbody>
+      </table>
+    </section>
+
+    <section id="view-attendance" style="display:none">
+      <h2>My Attendance</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Status</th></tr></thead>
+        <tbody id="attRows"></tbody>
+      </table>
+    </section>
+
+    <section id="view-profile" style="display:none">
+      <h2>My Profile</h2>
+      <div id="profileBox"></div>
+    </section>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/student.js"></script>
+</body>
+</html>
