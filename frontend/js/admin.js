@@ -47,6 +47,9 @@ async function init() {
     ? 'Delete permanently — cannot be restored'
     : 'Delete permanently — you cannot restore it (only the global admin can)';
 
+  document.getElementById('teacherSearch').placeholder = ctx.isGlobal
+    ? '🔍 Search name, email, login ID, department or college…'
+    : '🔍 Search name, email, login ID or department…';
   if (ctx.isGlobal) await refreshCollegesCache();
   loadStats();
 }
@@ -134,7 +137,17 @@ async function loadStats() {
 // ---------------- Colleges (global) ---------------------------------------------
 async function loadColleges() {
   await refreshCollegesCache();
-  document.getElementById('collegeRows').innerHTML = collegesCache.map((c) => {
+  document.getElementById('collegeSearch').oninput = renderColleges;
+  renderColleges();
+}
+
+// Search: college name, short name, admin name, admin email (and admin login ID)
+function renderColleges() {
+  const q = String(document.getElementById('collegeSearch').value || '').trim().toLowerCase();
+  const list = !q ? collegesCache : collegesCache.filter((c) =>
+    [c.name, c.shortName, c.admin?.name, c.admin?.email, c.admin?.loginId].some((v) => String(v || '').toLowerCase().includes(q)));
+  document.getElementById('collegeCount').textContent = q ? `Showing ${list.length} of ${collegesCache.length} college(s)` : '';
+  document.getElementById('collegeRows').innerHTML = list.map((c) => {
     const a = c.admin;
     const adminCell = a
       ? `${esc(a.name)}<br/><small style="color:var(--muted)">${esc(a.email)} · <code>${esc(a.loginId)}</code></small>${a.resetRequested ? '<br/><span class="badge warn">Reset requested</span>' : ''}`
@@ -156,7 +169,7 @@ async function loadColleges() {
         <button class="btn ghost" style="color:var(--danger)" onclick="removeCollege('${c.id}')">Remove</button>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" style="color:var(--muted)">No colleges yet.</td></tr>';
+  }).join('') || `<tr><td colspan="8" style="color:var(--muted)">${collegesCache.length ? 'No college matches your search.' : 'No colleges yet.'}</td></tr>`;
 }
 
 // Short-name suggestion: initials, skipping "of", "the", "and" … (same rule as the server)
@@ -346,7 +359,18 @@ async function initTeachersView() {
 
 async function loadTeachers() {
   const cid = ctx.isGlobal ? document.getElementById('teacherCollegeFilter').value : '';
-  const teachers = await api(`/admin/teachers${cid && cid !== 'all' ? `?collegeId=${cid}` : ''}`);
+  teacherListCache = await api(`/admin/teachers${cid && cid !== 'all' ? `?collegeId=${cid}` : ''}`);
+  document.getElementById('teacherSearch').oninput = renderTeachers;
+  renderTeachers();
+}
+
+// Search: name, email, login ID, department(s) — and college name / short name for the global admin
+let teacherListCache = [];
+function renderTeachers() {
+  const q = String(document.getElementById('teacherSearch').value || '').trim().toLowerCase();
+  const fields = (t) => [t.name, t.email, t.loginId, teacherDeptText(t), ...(ctx.isGlobal ? [t.collegeName, t.collegeShort] : [])];
+  const teachers = !q ? teacherListCache : teacherListCache.filter((t) => fields(t).some((v) => String(v || '').toLowerCase().includes(q)));
+  document.getElementById('teacherCount').textContent = q ? `Showing ${teachers.length} of ${teacherListCache.length} teacher(s)` : '';
   document.getElementById('teacherRows').innerHTML = teachers.map((t) => `
     <tr>
       <td>${esc(t.name)}</td>
@@ -360,7 +384,7 @@ async function loadTeachers() {
         <button class="btn ghost" onclick="toggleTeacher('${t.id}','${t.status}')">${t.status === 'active' ? 'Suspend' : 'Reactivate'}</button>
         <button class="btn ghost" style="color:var(--danger)" onclick="removeTeacher('${t.id}')">Remove</button>
       </td>
-    </tr>`).join('') || `<tr><td colspan="${ctx.isGlobal ? 7 : 6}" style="color:var(--muted)">No teachers yet.</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="${ctx.isGlobal ? 7 : 6}" style="color:var(--muted)">${teacherListCache.length ? 'No teacher matches your search.' : 'No teachers yet.'}</td></tr>`;
 }
 
 async function removeTeacher(id) {

@@ -47,6 +47,8 @@
         Suspending a college blocks sign-in for its admin, teachers and students. Removing a college deletes all of its data
         (restorable from <b>Restore Data → Admin's removals</b>).
       </p>
+      <input id="collegeSearch" class="search-input" placeholder="🔍 Search college name, short name, admin name or admin email…" />
+      <p class="result-count" id="collegeCount"></p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>College</th><th>Short name</th><th>College admin</th><th>Teachers</th><th>Students</th><th>Next roll no.</th><th>Status</th><th></th></tr></thead>
@@ -64,6 +66,8 @@
           <button class="btn" onclick="openAddTeacher()">+ Add Teacher</button>
         </div>
       </div>
+      <input id="teacherSearch" class="search-input" placeholder="🔍 Search name, email, login ID or department…" />
+      <p class="result-count" id="teacherCount"></p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Name</th><th>Email</th><th>Login ID</th><th class="global-only" style="display:none">College</th><th>Department</th><th>Status</th><th></th></tr></thead>

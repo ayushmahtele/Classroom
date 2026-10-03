@@ -359,3 +359,70 @@ td.actions { white-space: nowrap; }
   .seg-tabs button { font-size: 12px; }
 }
 .sidebar .logout { align-self: flex-start; width: auto; }
+
+/* ===================================================================
+   Quiz page — phone & tablet layout (CSS only; quiz.html / quiz.js /
+   proctor.js are untouched). The camera <video> always stays visible and
+   playing; detection reads the camera stream itself, not its size on screen.
+   =================================================================== */
+.quiz-main .question-card h3, .quiz-main .question-card p { word-break: break-word; }
+.option-choice { min-height: 44px; }            /* comfortable tap target */
+.option-choice span, .option-choice label { flex: 1; min-width: 0; word-break: break-word; }
+
+/* tablets: slimmer camera column */
+@media (max-width: 1100px) and (min-width: 821px) {
+  .quiz-side { width: 240px; padding: 16px; }
+  .quiz-main { padding: 20px 24px; }
+}
+
+/* phones + portrait tablets: camera strip on top, question full width, buttons pinned at the bottom */
+@media (max-width: 820px) {
+  .quiz-shell { flex-direction: column; height: auto; min-height: 100vh; min-height: 100dvh; }
+  .quiz-side {
+    order: -1; width: auto; position: sticky; top: 0; z-index: 20;
+    display: grid; grid-template-columns: 104px 1fr; grid-template-rows: auto 1fr;
+    column-gap: 12px; row-gap: 4px; padding: 10px 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.25);
+  }
+  .quiz-side video { grid-row: 1 / span 2; width: 104px; height: 78px; object-fit: cover; border-radius: 8px; }
+  .quiz-side .cam-status { margin: 0; text-align: left; font-weight: 600; align-self: end; }
+  .quiz-side > div:not(.cam-status):not(.proctor-log) { display: none; } /* "Proctoring Log" caption */
+  .quiz-side .proctor-log { margin: 0; max-height: 52px; font-size: 11px; }
+  .quiz-side .proctor-log .entry { padding: 3px 0; }
+
+  .quiz-main { padding: 14px 14px 0; overflow: visible; }
+  .quiz-main > .row.between:first-child { flex-wrap: nowrap; gap: 10px; align-items: center; }
+  .quiz-main > .row.between:first-child h2 { margin: 0; font-size: 19px; min-width: 0; overflow-wrap: anywhere; }
+  .quiz-main .timer {
+    margin: 0; font-size: 20px; padding: 6px 12px; border-radius: 10px; background: #fff;
+    border: 1px solid var(--border); white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .quiz-main .timer.low { background: #fde6e7; border-color: var(--danger); }
+  .question-nav { margin: 12px 0; gap: 8px; }
+  .question-nav button { width: 40px; height: 40px; font-size: 14px; }
+  .question-card { padding: 16px; }
+  .option-choice { padding: 12px; font-size: 15px; }
+
+  /* Previous / Next / Submit pinned to the bottom of the screen */
+  .quiz-main > .row.between:last-child {
+    position: sticky; bottom: 0; z-index: 10; margin: 16px -14px 0 !important;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    background: rgba(244,246,251,.96); border-top: 1px solid var(--border);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .quiz-main > .row.between:last-child .btn { width: 100%; padding: 12px 8px; font-size: 15px; }
+  .quiz-main > .row.between:last-child .btn.danger { grid-column: 1 / -1; }
+
+  /* pre-check screen */
+  #preCheckScreen { padding: 16px; align-items: flex-start; }
+  #preCheckScreen .login-card { padding: 20px; }
+}
+/* portrait tablets: bigger camera preview in the top strip */
+@media (max-width: 820px) and (min-width: 600px) {
+  .quiz-side { grid-template-columns: 160px 1fr; }
+  .quiz-side video { width: 160px; height: 120px; }
+  .quiz-side .proctor-log { max-height: 90px; font-size: 12px; }
+  .quiz-main { padding: 20px 24px 0; }
+  .quiz-main > .row.between:last-child { margin: 16px -24px 0 !important; padding-left: 24px; padding-right: 24px; grid-template-columns: 1fr 1fr 1.2fr; }
+  .quiz-main > .row.between:last-child .btn.danger { grid-column: auto; }
+}
