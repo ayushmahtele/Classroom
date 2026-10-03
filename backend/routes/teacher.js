@@ -14,6 +14,16 @@ const sameCollege = (req, user) => !!user && user.collegeId === req.user.college
 const isMyStudent = (req, student) =>
   !!student && student.role === 'student' && sameCollege(req, student) && studentVisibleTo(student, req.user.id);
 
+// Students of a class who are CURRENTLY this teacher's students. A student who was
+// removed from this teacher (or removed by an admin) disappears from the class, its
+// attendance sheet and history right away, and comes back automatically if the
+// removal is restored from the recycle bin.
+const activeIdsOf = (req, cls) => (cls.studentIds || []).filter((sid) => isMyStudent(req, db.users.findById(sid)));
+const studentInfo = (sid) => {
+  const s = db.users.findById(sid);
+  return { studentName: s?.name || '(removed student)', studentRoll: s?.rollNumber || '' };
+};
+
 // ---- Profile ------------------------------------------------------------
 router.get('/me', (req, res) => {
   const me = db.users.findById(req.user.id);
@@ -268,7 +278,12 @@ router.post('/classes', async (req, res) => {
 });
 
 router.get('/classes', (req, res) => {
-  res.json(db.classes.find((c) => c.teacherId === req.user.id));
+  const quizzes = db.quizzes.find((q) => q.teacherId === req.user.id);
+  res.json(db.classes.find((c) => c.teacherId === req.user.id).map((c) => ({
+    ...c,
+    studentIds: activeIdsOf(req, c),
+    quizCount: quizzes.filter((q) => q.classId === c.id).length
+  })));
 });
 
 // Deletes the class with its attendance, quizzes, results and proctoring data.
@@ -427,20 +442,36 @@ router.post('/attendance', async (req, res) => {
   const { classId, date, records } = req.body || {}; // records: [{studentId, status}]
   const cls = db.classes.findById(classId);
   if (!cls || cls.teacherId !== req.user.id) return res.status(404).json({ error: 'Class not found' });
-  const created = [];
-  // only students who are actually in this class
-  for (const r of (records || []).filter((x) => cls.studentIds.includes(x.studentId))) {
-    const entry = { id: id(), classId, studentId: r.studentId, date, status: r.status, markedBy: req.user.id };
-    await db.attendance.insert(entry);
-    created.push(entry);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return res.status(400).json({ error: 'Choose a valid date' });
+  const active = new Set(activeIdsOf(req, cls));
+  const saved = [];
+  // only students who are currently in this class; saving the same day again
+  // updates that day's record instead of adding a duplicate row
+  for (const r of (records || []).filter((x) => active.has(x.studentId))) {
+    if (!['present', 'absent', 'late'].includes(r.status)) continue;
+    const existing = db.attendance.findOne((a) => a.classId === classId && a.studentId === r.studentId && a.date === date);
+    if (existing) {
+      saved.push(await db.attendance.update(existing.id, { status: r.status, markedBy: req.user.id }));
+    } else {
+      const entry = { id: id(), classId, studentId: r.studentId, date, status: r.status, markedBy: req.user.id };
+      await db.attendance.insert(entry);
+      saved.push(entry);
+    }
   }
-  res.status(201).json(created);
+  res.status(201).json(saved);
 });
 
+// Attendance history (only students currently in the class), newest first,
+// with name, roll number and class name. Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD.
 router.get('/attendance', (req, res) => {
-  const { classId } = req.query;
-  const myClassIds = db.classes.find((c) => c.teacherId === req.user.id).map((c) => c.id);
-  const rows = db.attendance.find((a) => myClassIds.includes(a.classId) && (!classId || a.classId === classId));
+  const { classId, from, to } = req.query;
+  const myClasses = db.classes.find((c) => c.teacherId === req.user.id && (!classId || c.id === classId));
+  const activeByClass = Object.fromEntries(myClasses.map((c) => [c.id, new Set(activeIdsOf(req, c))]));
+  const names = Object.fromEntries(myClasses.map((c) => [c.id, c.name]));
+  const rows = db.attendance
+    .find((a) => activeByClass[a.classId]?.has(a.studentId) && (!from || a.date >= from) && (!to || a.date <= to))
+    .map((a) => ({ ...a, ...studentInfo(a.studentId), className: names[a.classId] }))
+    .sort((a, b) => (b.date.localeCompare(a.date)) || String(a.studentRoll).localeCompare(String(b.studentRoll), undefined, { numeric: true }));
   res.json(rows);
 });
 
@@ -451,8 +482,16 @@ router.get('/proctoring/events', (req, res) => {
   let events = db.proctorEvents.find((e) => myQuizIds.includes(e.quizId));
   if (quizId) events = events.filter((e) => e.quizId === quizId);
   if (studentId) events = events.filter((e) => e.studentId === studentId);
+  const quizInfo = Object.fromEntries(db.quizzes.find((q) => q.teacherId === req.user.id).map((q) => [q.id, q]));
+  const classNames = Object.fromEntries(db.classes.find((c) => c.teacherId === req.user.id).map((c) => [c.id, c.name]));
   events = events
-    .map((e) => ({ ...e, studentName: db.users.findById(e.studentId)?.name }))
+    .map((e) => {
+      const q = quizInfo[e.quizId];
+      return {
+        ...e, ...studentInfo(e.studentId),
+        quizTitle: q?.title || '', classId: q?.classId || '', className: classNames[q?.classId] || ''
+      };
+    })
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   res.json(events);
 });

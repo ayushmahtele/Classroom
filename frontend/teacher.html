@@ -33,14 +33,19 @@
     <!-- Classes -->
     <section id="view-classes">
       <div class="topbar"><h2 style="margin:0">Classes</h2><button class="btn" onclick="openNewClass()">+ New Class</button></div>
-      <div id="classList" class="two-col"></div>
+      <div id="classList" class="card-grid"></div>
     </section>
 
     <!-- Students -->
     <section id="view-students" style="display:none">
       <div class="topbar"><h2 style="margin:0">Students</h2><button class="btn" onclick="openAddStudent()">+ Add Student</button></div>
+      <div class="filter-bar">
+        <input id="stuSearch" class="grow" placeholder="🔍 Search name, roll no., email or login ID" />
+        <select id="stuClassFilter"></select>
+      </div>
+      <p class="result-count" id="stuCount"></p>
       <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Login ID</th><th>Roll No.</th><th>Domain</th><th>Classes</th><th></th></tr></thead>
+        <thead><tr><th>Roll No.</th><th>Name</th><th>Email</th><th>Login ID</th><th>Domain</th><th>Classes</th><th></th></tr></thead>
         <tbody id="studentRows"></tbody>
       </table>
     </section>
@@ -48,6 +53,16 @@
     <!-- Quizzes -->
     <section id="view-quizzes" style="display:none">
       <div class="topbar"><h2 style="margin:0">Quizzes</h2><button class="btn" onclick="openNewQuiz()">+ New Quiz</button></div>
+      <div class="filter-bar">
+        <input id="quizSearch" class="grow" placeholder="🔍 Search quiz title" />
+        <select id="quizClassFilter"></select>
+        <select id="quizStatusFilter">
+          <option value="">Published & drafts</option>
+          <option value="published">Published only</option>
+          <option value="draft">Drafts only</option>
+        </select>
+      </div>
+      <p class="result-count" id="quizCount"></p>
       <table>
         <thead><tr><th>Title</th><th>Class</th><th>Questions</th><th>Duration</th><th>Status</th><th></th></tr></thead>
         <tbody id="quizRows"></tbody>
@@ -57,9 +72,13 @@
     <!-- Results -->
     <section id="view-results" style="display:none">
       <h2>Results</h2>
-      <label>Choose a quiz</label>
-      <select id="resultsQuizSelect" style="max-width:360px"></select>
-      <table style="margin-top:16px">
+      <div class="filter-bar">
+        <div class="field"><label>Class</label><select id="resClass"></select></div>
+        <div class="field"><label>Quiz</label><select id="resultsQuizSelect"></select></div>
+        <div class="field" style="flex:2 1 220px"><label>Search student</label><input id="resSearch" placeholder="Name or roll no." /></div>
+      </div>
+      <div class="summary-row" id="resSummary"></div>
+      <table>
         <thead><tr><th>Student</th><th>Roll No.</th><th>Score</th><th>Status</th><th>Tab switches</th><th>Fullscreen exits</th><th>Alerts</th></tr></thead>
         <tbody id="resultRows"></tbody>
       </table>
@@ -68,19 +87,36 @@
     <!-- Attendance -->
     <section id="view-attendance" style="display:none">
       <h2>Attendance</h2>
-      <div class="row">
-        <select id="attClassSelect"></select>
-        <input id="attDate" type="date" />
-        <button class="btn" onclick="loadAttendanceSheet()">Load class</button>
+      <div class="panel">
+        <div class="filter-bar" style="margin-bottom:6px">
+          <div class="field"><label>Class</label><select id="attClassSelect"></select></div>
+          <div class="field"><label>Date</label><input id="attDate" type="date" /></div>
+        </div>
+        <p class="hint" id="attSheetHint" style="margin:0 0 10px"></p>
+        <table>
+          <thead><tr><th>Roll No.</th><th>Student</th><th>Status</th></tr></thead>
+          <tbody id="attRows"></tbody>
+        </table>
+        <div class="att-quick">
+          <button class="btn secondary small" type="button" onclick="markAll('present')">✓ All present</button>
+          <button class="btn secondary small" type="button" onclick="markAll('absent')">✗ All absent</button>
+          <button class="btn" style="margin-left:auto" onclick="submitAttendance()">Save attendance</button>
+        </div>
       </div>
-      <table style="margin-top:16px">
-        <thead><tr><th>Student</th><th>Status</th></tr></thead>
-        <tbody id="attRows"></tbody>
-      </table>
-      <button class="btn" style="margin-top:14px" onclick="submitAttendance()">Save attendance</button>
-      <h3 style="margin-top:30px">History</h3>
+
+      <h3 style="margin-top:26px">History <small style="color:var(--muted);font-weight:400" id="attHistClass"></small></h3>
+      <div class="filter-bar">
+        <div class="field"><label>From</label><input id="attFrom" type="date" /></div>
+        <div class="field"><label>To</label><input id="attTo" type="date" /></div>
+        <div class="field"><label>Status</label>
+          <select id="attStatusFilter"><option value="">All</option><option value="present">Present</option><option value="late">Late</option><option value="absent">Absent</option></select>
+        </div>
+        <div class="field" style="flex:2 1 200px"><label>Student</label><input id="attSearch" placeholder="Name or roll no." /></div>
+        <button class="btn secondary small" type="button" style="align-self:flex-end" onclick="clearAttFilters()">Clear</button>
+      </div>
+      <div class="summary-row" id="attSummary"></div>
       <table>
-        <thead><tr><th>Date</th><th>Student</th><th>Status</th></tr></thead>
+        <thead><tr><th>Date</th><th>Roll No.</th><th>Student</th><th>Status</th></tr></thead>
         <tbody id="attHistoryRows"></tbody>
       </table>
     </section>
@@ -88,10 +124,15 @@
     <!-- Proctoring reports -->
     <section id="view-proctoring" style="display:none">
       <h2>Proctoring Reports</h2>
-      <label>Filter by quiz</label>
-      <select id="proctorQuizSelect" style="max-width:360px"></select>
-      <table style="margin-top:16px">
-        <thead><tr><th>Time</th><th>Student</th><th>Event</th><th>Confidence</th><th>Evidence</th></tr></thead>
+      <div class="filter-bar">
+        <div class="field"><label>Class</label><select id="prClass"></select></div>
+        <div class="field"><label>Quiz</label><select id="proctorQuizSelect"></select></div>
+        <div class="field"><label>Event</label><select id="prType"></select></div>
+        <div class="field" style="flex:2 1 220px"><label>Search</label><input id="prSearch" placeholder="Student, roll no. or quiz title" /></div>
+      </div>
+      <div class="summary-row" id="prSummary"></div>
+      <table>
+        <thead><tr><th>Time</th><th>Student</th><th>Roll No.</th><th>Class</th><th>Quiz</th><th>Event</th><th>Confidence</th><th>Evidence</th></tr></thead>
         <tbody id="proctorRows"></tbody>
       </table>
     </section>
@@ -105,8 +146,11 @@
     <!-- Live monitor -->
     <section id="view-live" style="display:none">
       <h2>Live Monitor</h2>
-      <label>Watch a quiz live</label>
-      <select id="liveQuizSelect" style="max-width:360px"></select>
+      <div class="filter-bar">
+        <div class="field"><label>Class</label><select id="liveClass"></select></div>
+        <div class="field" style="flex:2 1 220px"><label>Search quiz</label><input id="liveSearch" placeholder="Quiz title" /></div>
+        <div class="field" style="flex:2 1 220px"><label>Watch this quiz live</label><select id="liveQuizSelect"></select></div>
+      </div>
       <div class="live-grid" id="liveGrid" style="margin-top:16px"></div>
     </section>
   </div>
@@ -196,8 +240,9 @@
 
 <div class="modal-backdrop" id="modalEnroll" style="display:none">
   <div class="modal">
-    <h3>Enroll Students</h3>
-    <div id="enrollList"></div>
+    <h3>Manage students — <span id="enrollClassName"></span></h3>
+    <input id="enrollSearch" placeholder="🔍 Search name or roll no." style="margin-bottom:8px" />
+    <div id="enrollList" style="max-height:55vh;overflow:auto"></div>
     <button class="btn full" onclick="closeModal('modalEnroll'); loadClasses();">Done</button>
   </div>
 </div>
@@ -249,5 +294,6 @@
 <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/dist/socket.io.min.js"></script>
 <script src="js/profile.js"></script>
 <script src="js/teacher.js"></script>
+<script src="js/layout.js"></script>
 </body>
 </html>

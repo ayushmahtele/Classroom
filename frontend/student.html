@@ -16,6 +16,7 @@
     <div class="brand"><img src="img/logo.png" alt="" />Class<span>room</span></div>
     <nav>
       <button class="nav-btn active" data-view="quizzes">📝 My Quizzes</button>
+      <button class="nav-btn" data-view="classes">🏫 My Classes</button>
       <button class="nav-btn" data-view="results">📈 My Results</button>
       <button class="nav-btn" data-view="attendance">🗓 My Attendance</button>
       <button class="nav-btn" data-view="profile">👤 My Profile</button>
@@ -28,21 +29,51 @@
   <div class="main">
     <section id="view-quizzes">
       <h2>My Quizzes</h2>
-      <div id="quizList" class="two-col"></div>
+      <div class="chips" id="quizChips"></div>
+      <div class="filter-bar">
+        <input id="qSearch" class="grow" placeholder="🔍 Search by quiz title or class name" />
+        <select id="qClass"></select>
+      </div>
+      <div id="quizList" class="card-grid"></div>
+    </section>
+
+    <section id="view-classes" style="display:none">
+      <div id="classesHome">
+        <h2>My Classes</h2>
+        <p class="page-sub">Tap a class to see its quizzes and your progress.</p>
+        <div class="filter-bar"><input id="cSearch" class="grow" placeholder="🔍 Search class or teacher" /></div>
+        <div id="classList" class="card-grid"></div>
+      </div>
+      <div id="classDetail" style="display:none"></div>
     </section>
 
     <section id="view-results" style="display:none">
       <h2>My Results</h2>
+      <div class="filter-bar">
+        <input id="rSearch" class="grow" placeholder="🔍 Search by quiz title or class name" />
+        <select id="rClass"></select>
+      </div>
+      <div class="summary-row" id="rSummary"></div>
       <table>
-        <thead><tr><th>Quiz</th><th>Score</th><th>Status</th><th>Submitted</th></tr></thead>
+        <thead><tr><th>Quiz</th><th>Class</th><th>Teacher</th><th>Score</th><th>Status</th><th>Submitted</th></tr></thead>
         <tbody id="resultRows"></tbody>
       </table>
     </section>
 
     <section id="view-attendance" style="display:none">
       <h2>My Attendance</h2>
+      <div class="filter-bar">
+        <div class="field"><label>Class</label><select id="aClass"></select></div>
+        <div class="field"><label>From</label><input id="aFrom" type="date" /></div>
+        <div class="field"><label>To</label><input id="aTo" type="date" /></div>
+        <div class="field"><label>Status</label>
+          <select id="aStatus"><option value="">All</option><option value="present">Present</option><option value="late">Late</option><option value="absent">Absent</option></select>
+        </div>
+        <div class="field" style="flex:2 1 200px"><label>Search</label><input id="aSearch" placeholder="Class or teacher name" /></div>
+      </div>
+      <div class="summary-row" id="aSummary"></div>
       <table>
-        <thead><tr><th>Date</th><th>Status</th></tr></thead>
+        <thead><tr><th>Date</th><th>Class</th><th>Teacher</th><th>Status</th></tr></thead>
         <tbody id="attRows"></tbody>
       </table>
     </section>
@@ -57,5 +88,6 @@
 <script src="js/api.js"></script>
 <script src="js/profile.js"></script>
 <script src="js/student.js"></script>
+<script src="js/layout.js"></script>
 </body>
 </html>

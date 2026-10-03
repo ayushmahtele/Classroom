@@ -33,19 +33,44 @@ function switchView(view) {
 
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
+// ---------------- Shared helpers ----------------------------------------------
+const byRoll = (a, b) => String(a.rollNumber || a.studentRoll || '').localeCompare(String(b.rollNumber || b.studentRoll || ''), undefined, { numeric: true });
+const lc = (v) => String(v ?? '').toLowerCase();
+const todayLocal = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in the user's time zone
+const classNameOf = (id) => classesCache.find((c) => c.id === id)?.name || '';
+
+/** Fills a class <select>. `first` = label of the "all" option. Keeps the current choice. */
+function fillClassFilter(id, first = 'All classes', extra = '') {
+  const sel = document.getElementById(id);
+  const keep = sel.value;
+  sel.innerHTML = (first ? `<option value="">${escapeHtml(first)}</option>` : '') + extra +
+    classesCache.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+}
+
 // ---------------- Classes ----------------------------------------------
 async function loadClasses() {
-  classesCache = await api('/teacher/classes');
-  if (!studentsCache.length) studentsCache = await api('/teacher/students');
+  [classesCache, studentsCache] = await Promise.all([api('/teacher/classes'), api('/teacher/students')]);
   const el = document.getElementById('classList');
   el.innerHTML = classesCache.map((c) => `
     <div class="panel">
-      <h3>${c.name}</h3>
-      <p style="color:var(--muted);font-size:13px">${c.studentIds.length} student(s) enrolled</p>
-      <button class="btn ghost" onclick="openEnroll('${c.id}')">Manage students</button>
-      <button class="btn ghost" style="color:var(--danger)" onclick="deleteClass('${c.id}')">Delete class</button>
+      <h3>${escapeHtml(c.name)}</h3>
+      <div class="meta"><span>👥 ${c.studentIds.length} student(s)</span><span>📝 ${c.quizCount || 0} quiz(zes)</span></div>
+      <div class="card-actions">
+        <button class="btn ghost" onclick="openEnroll('${c.id}')">Manage students</button>
+        <button class="btn ghost" onclick="goAttendance('${c.id}')">Attendance</button>
+        <button class="btn ghost" style="color:var(--danger)" onclick="deleteClass('${c.id}')">Delete</button>
+      </div>
     </div>
-  `).join('') || '<p style="color:var(--muted)">No classes yet. Create one to get started.</p>';
+  `).join('') || '<div class="empty">No classes yet. Create one to get started.</div>';
+}
+
+function goAttendance(classId) {
+  switchView('attendance');
+  setTimeout(() => {
+    const sel = document.getElementById('attClassSelect');
+    if ([...sel.options].some((o) => o.value === classId)) { sel.value = classId; onAttClassChange(); }
+  }, 150);
 }
 
 async function deleteClass(classId) {
@@ -68,28 +93,44 @@ async function createClass() {
   loadClasses();
 }
 
-async function openEnroll(classId) {
+// Only students who are currently yours are listed; enrolled ones first.
+let enrollClassId = null;
+function openEnroll(classId) {
+  enrollClassId = classId;
   const cls = classesCache.find((c) => c.id === classId);
-  const list = document.getElementById('enrollList');
-  list.innerHTML = studentsCache.map((s) => {
-    const enrolled = cls.studentIds.includes(s.id);
-    return `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--border)">
-      <div>${s.name} <span style="color:var(--muted);font-size:12px">${s.email}</span></div>
-      <button class="btn ${enrolled ? 'secondary' : ''}" onclick="toggleEnroll('${classId}','${s.id}', ${enrolled})">
-        ${enrolled ? 'Remove' : 'Add'}
-      </button>
-    </div>`;
-  }).join('') || '<p style="color:var(--muted)">No students yet — add some from the Students tab.</p>';
+  document.getElementById('enrollClassName').textContent = cls ? cls.name : '';
+  const search = document.getElementById('enrollSearch');
+  search.value = '';
+  search.oninput = renderEnrollList;
+  renderEnrollList();
   document.getElementById('modalEnroll').style.display = 'flex';
+}
+function renderEnrollList() {
+  const cls = classesCache.find((c) => c.id === enrollClassId);
+  const q = lc(document.getElementById('enrollSearch').value.trim());
+  const list = document.getElementById('enrollList');
+  if (!studentsCache.length) { list.innerHTML = '<p style="color:var(--muted)">No students yet — add some from the Students tab.</p>'; return; }
+  const rows = studentsCache
+    .filter((s) => !q || lc(s.name).includes(q) || lc(s.rollNumber).includes(q))
+    .map((s) => ({ s, enrolled: cls.studentIds.includes(s.id) }))
+    .sort((a, b) => (b.enrolled - a.enrolled) || byRoll(a.s, b.s));
+  list.innerHTML = rows.map(({ s, enrolled }) => `
+    <div class="row between" style="padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:nowrap">
+      <div style="min-width:0"><code>${escapeHtml(s.rollNumber || '-')}</code> &nbsp;<b>${escapeHtml(s.name)}</b>
+        <div style="color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(s.email)}</div></div>
+      <button class="btn small ${enrolled ? 'secondary' : ''}" onclick="toggleEnroll('${cls.id}','${s.id}', ${enrolled})">${enrolled ? 'Remove' : 'Add'}</button>
+    </div>`).join('') || '<p style="color:var(--muted)">No student matches your search.</p>';
 }
 
 async function toggleEnroll(classId, studentId, currentlyEnrolled) {
   const path = currentlyEnrolled ? `/teacher/classes/${classId}/unenroll` : `/teacher/classes/${classId}/enroll`;
-  await api(path, { method: 'POST', body: { studentId } });
+  try {
+    await api(path, { method: 'POST', body: { studentId } });
+  } catch (e) { alert(e.message); return; }
   const cls = classesCache.find((c) => c.id === classId);
   if (currentlyEnrolled) cls.studentIds = cls.studentIds.filter((id) => id !== studentId);
   else cls.studentIds.push(studentId);
-  openEnroll(classId);
+  renderEnrollList();
 }
 
 // ---------------- Students ----------------------------------------------
@@ -97,18 +138,30 @@ let myDepartments = [];
 let scStudentId = null;
 
 async function loadStudents() {
-  studentsCache = await api('/teacher/students');
-  classesCache = await api('/teacher/classes');
-  const className = (id) => classesCache.find((c) => c.id === id)?.name;
-  document.getElementById('studentRows').innerHTML = studentsCache.map((s) => `
+  [studentsCache, classesCache] = await Promise.all([api('/teacher/students'), api('/teacher/classes')]);
+  fillClassFilter('stuClassFilter', 'All classes', '<option value="__none">Not in any class</option>');
+  document.getElementById('stuSearch').oninput = renderStudents;
+  document.getElementById('stuClassFilter').onchange = renderStudents;
+  renderStudents();
+}
+
+function renderStudents() {
+  const q = lc(document.getElementById('stuSearch').value.trim());
+  const cf = document.getElementById('stuClassFilter').value;
+  const list = studentsCache
+    .filter((s) => !q || [s.name, s.rollNumber, s.email, s.loginId].some((v) => lc(v).includes(q)))
+    .filter((s) => !cf || (cf === '__none' ? !(s.classIds || []).length : (s.classIds || []).includes(cf)))
+    .sort(byRoll);
+  document.getElementById('stuCount').textContent = `Showing ${list.length} of ${studentsCache.length} student(s)`;
+  document.getElementById('studentRows').innerHTML = list.map((s) => `
     <tr>
+      <td><b>${escapeHtml(s.rollNumber || '-')}</b></td>
       <td>${escapeHtml(s.name)}</td>
       <td>${escapeHtml(s.email)}</td>
       <td><code>${escapeHtml(s.loginId)}</code></td>
-      <td>${escapeHtml(s.rollNumber || '-')}</td>
       <td>${escapeHtml(s.department || '-')}</td>
-      <td>${escapeHtml((s.classIds || []).map(className).filter(Boolean).join(', ') || '-')}</td>
-      <td>
+      <td>${escapeHtml((s.classIds || []).map(classNameOf).filter(Boolean).join(', ') || '-')}</td>
+      <td class="actions">
         ${s.status === 'suspended' ? '<span class="badge danger">suspended</span>' : ''}
         ${s.resetRequested ? '<span class="badge warn">Reset requested</span>' : ''}
         <button class="btn ghost" onclick="openStudentClasses('${s.id}')">Add to class</button>
@@ -116,7 +169,7 @@ async function loadStudents() {
         <button class="btn ghost" style="color:var(--danger)" onclick="removeStudent('${s.id}')">Remove</button>
       </td>
     </tr>
-  `).join('') || '<tr><td colspan="7" style="color:var(--muted)">No students yet.</td></tr>';
+  `).join('') || `<tr><td colspan="7" style="color:var(--muted)">${studentsCache.length ? 'No student matches your filters.' : 'No students yet.'}</td></tr>`;
 }
 
 async function removeStudent(studentId) {
@@ -331,23 +384,37 @@ async function saveStudentClasses() {
 
 // ---------------- Quizzes ----------------------------------------------
 async function loadQuizzes() {
-  quizzesCache = await api('/teacher/quizzes');
-  if (!classesCache.length) classesCache = await api('/teacher/classes');
-  document.getElementById('quizRows').innerHTML = quizzesCache.map((q) => {
-    const cls = classesCache.find((c) => c.id === q.classId);
-    return `<tr>
-      <td>${q.title}</td>
-      <td>${cls?.name || '-'}</td>
-      <td>${q.questions.length}</td>
-      <td>${q.durationMinutes} min</td>
-      <td><span class="badge ${q.published ? 'ok' : 'muted'}">${q.published ? 'Published' : 'Draft'}</span></td>
-      <td>
-        <button class="btn ghost" onclick="openEditQuiz('${q.id}')">Edit</button>
-        <button class="btn ghost" onclick="togglePublish('${q.id}', ${q.published})">${q.published ? 'Unpublish' : 'Publish'}</button>
-        <button class="btn ghost" onclick="deleteQuiz('${q.id}')">Delete</button>
+  [quizzesCache, classesCache] = await Promise.all([api('/teacher/quizzes'), api('/teacher/classes')]);
+  fillClassFilter('quizClassFilter');
+  ['quizSearch', 'quizClassFilter', 'quizStatusFilter'].forEach((id) => {
+    const el = document.getElementById(id);
+    el.oninput = renderQuizzes; el.onchange = renderQuizzes;
+  });
+  renderQuizzes();
+}
+
+function renderQuizzes() {
+  const q = lc(document.getElementById('quizSearch').value.trim());
+  const cf = document.getElementById('quizClassFilter').value;
+  const sf = document.getElementById('quizStatusFilter').value;
+  const list = quizzesCache
+    .filter((x) => !q || lc(x.title).includes(q))
+    .filter((x) => !cf || x.classId === cf)
+    .filter((x) => !sf || (sf === 'published' ? x.published : !x.published))
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  document.getElementById('quizCount').textContent = `Showing ${list.length} of ${quizzesCache.length} quiz(zes)`;
+  document.getElementById('quizRows').innerHTML = list.map((x) => `<tr>
+      <td><b>${escapeHtml(x.title)}</b></td>
+      <td>${escapeHtml(classNameOf(x.classId) || '-')}</td>
+      <td>${x.questions.length}</td>
+      <td>${x.durationMinutes} min</td>
+      <td><span class="badge ${x.published ? 'ok' : 'muted'}">${x.published ? 'Published' : 'Draft'}</span></td>
+      <td class="actions">
+        <button class="btn ghost" onclick="openEditQuiz('${x.id}')">Edit</button>
+        <button class="btn ghost" onclick="togglePublish('${x.id}', ${x.published})">${x.published ? 'Unpublish' : 'Publish'}</button>
+        <button class="btn ghost" style="color:var(--danger)" onclick="deleteQuiz('${x.id}')">Delete</button>
       </td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="6" style="color:var(--muted)">No quizzes yet.</td></tr>';
+    </tr>`).join('') || `<tr><td colspan="6" style="color:var(--muted)">${quizzesCache.length ? 'No quiz matches your filters.' : 'No quizzes yet.'}</td></tr>`;
 }
 
 async function togglePublish(id, currentlyPublished) {
@@ -591,99 +658,220 @@ async function saveQuizEdit() {
 }
 
 // ---------------- Results ----------------------------------------------
+let resultsCache = [];
 async function loadResultsView() {
-  if (!quizzesCache.length) quizzesCache = await api('/teacher/quizzes');
+  [quizzesCache, classesCache] = await Promise.all([api('/teacher/quizzes'), api('/teacher/classes')]);
+  fillClassFilter('resClass');
+  document.getElementById('resClass').onchange = fillResultQuizzes;
+  document.getElementById('resultsQuizSelect').onchange = () => loadResults(document.getElementById('resultsQuizSelect').value);
+  document.getElementById('resSearch').oninput = renderResults;
+  fillResultQuizzes();
+}
+function fillResultQuizzes() {
+  const cf = document.getElementById('resClass').value;
   const sel = document.getElementById('resultsQuizSelect');
-  sel.innerHTML = quizzesCache.map((q) => `<option value="${q.id}">${q.title}</option>`).join('');
-  sel.onchange = () => loadResults(sel.value);
-  if (quizzesCache.length) loadResults(sel.value);
-  else document.getElementById('resultRows').innerHTML = '<tr><td colspan="7" style="color:var(--muted)">No quizzes yet.</td></tr>';
+  const list = quizzesCache.filter((q) => !cf || q.classId === cf);
+  sel.innerHTML = list.map((q) => `<option value="${q.id}">${escapeHtml(q.title)}${cf ? '' : ` — ${escapeHtml(classNameOf(q.classId))}`}</option>`).join('');
+  if (list.length) loadResults(sel.value);
+  else {
+    resultsCache = [];
+    document.getElementById('resSummary').innerHTML = '';
+    document.getElementById('resultRows').innerHTML = `<tr><td colspan="7" style="color:var(--muted)">${quizzesCache.length ? 'No quizzes in this class.' : 'No quizzes yet.'}</td></tr>`;
+  }
 }
 async function loadResults(quizId) {
-  const rows = await api(`/teacher/quizzes/${quizId}/results`);
+  resultsCache = (await api(`/teacher/quizzes/${quizId}/results`)).sort(byRoll);
+  renderResults();
+}
+function renderResults() {
+  const q = lc(document.getElementById('resSearch').value.trim());
+  const rows = resultsCache.filter((r) => !q || lc(r.studentName).includes(q) || lc(r.studentRoll).includes(q));
+  const done = resultsCache.filter((r) => r.status !== 'in-progress' && r.totalMarks);
+  const pct = done.map((r) => (r.score / r.totalMarks) * 100);
+  const avg = pct.length ? Math.round(pct.reduce((a, b) => a + b, 0) / pct.length) : null;
+  document.getElementById('resSummary').innerHTML = resultsCache.length ? `
+    <div class="summary-pill"><b>${resultsCache.length}</b>attempts</div>
+    <div class="summary-pill ok"><b>${avg === null ? '-' : avg + '%'}</b>average</div>
+    <div class="summary-pill"><b>${pct.length ? Math.round(Math.max(...pct)) + '%' : '-'}</b>highest</div>
+    <div class="summary-pill"><b>${pct.length ? Math.round(Math.min(...pct)) + '%' : '-'}</b>lowest</div>
+    <div class="summary-pill warn"><b>${resultsCache.filter((r) => r.status === 'auto-submitted').length}</b>auto-submitted</div>` : '';
   document.getElementById('resultRows').innerHTML = rows.map((r) => `
     <tr>
-      <td>${r.studentName || r.studentId}</td>
-      <td>${r.studentRoll || '-'}</td>
+      <td>${escapeHtml(r.studentName || r.studentId)}</td>
+      <td><b>${escapeHtml(r.studentRoll || '-')}</b></td>
       <td>${r.score ?? '-'} / ${r.totalMarks}</td>
-      <td><span class="badge ${r.status === 'submitted' ? 'ok' : r.status === 'auto-submitted' ? 'warn' : 'muted'}">${r.status}</span></td>
+      <td><span class="badge ${r.status === 'submitted' ? 'ok' : r.status === 'auto-submitted' ? 'warn' : 'muted'}">${escapeHtml(r.status)}</span></td>
       <td>${r.tabSwitches || 0}</td>
       <td>${r.fullscreenExits || 0}</td>
       <td>${r.alertCount || 0}</td>
     </tr>
-  `).join('') || '<tr><td colspan="7" style="color:var(--muted)">No attempts yet.</td></tr>';
+  `).join('') || `<tr><td colspan="7" style="color:var(--muted)">${resultsCache.length ? 'No student matches your search.' : 'No attempts yet.'}</td></tr>`;
 }
 
 // ---------------- Attendance ----------------------------------------------
+let attHistoryCache = [];
 async function loadAttendanceView() {
-  if (!classesCache.length) classesCache = await api('/teacher/classes');
-  const sel = document.getElementById('attClassSelect');
-  sel.innerHTML = classesCache.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
-  document.getElementById('attDate').value = new Date().toISOString().slice(0, 10);
-  if (classesCache.length) { loadAttendanceSheet(); loadAttendanceHistory(); }
+  [classesCache, studentsCache] = await Promise.all([api('/teacher/classes'), api('/teacher/students')]);
+  fillClassFilter('attClassSelect', '');
+  const dateEl = document.getElementById('attDate');
+  if (!dateEl.value) dateEl.value = todayLocal();
+  dateEl.max = todayLocal();
+  document.getElementById('attClassSelect').onchange = onAttClassChange;
+  dateEl.onchange = renderAttendanceSheet;
+  ['attFrom', 'attTo', 'attStatusFilter', 'attSearch'].forEach((id) => {
+    const el = document.getElementById(id);
+    el.oninput = renderAttendanceHistory; el.onchange = renderAttendanceHistory;
+  });
+  if (classesCache.length) onAttClassChange();
+  else {
+    document.getElementById('attRows').innerHTML = '<tr><td colspan="3" style="color:var(--muted)">Create a class first.</td></tr>';
+    document.getElementById('attHistoryRows').innerHTML = '';
+  }
 }
-function loadAttendanceSheet() {
+async function onAttClassChange() {
   const classId = document.getElementById('attClassSelect').value;
+  document.getElementById('attHistClass').textContent = classNameOf(classId) ? `— ${classNameOf(classId)}` : '';
+  attHistoryCache = await api(`/teacher/attendance?classId=${classId}`);
+  renderAttendanceSheet();
+  renderAttendanceHistory();
+}
+// kept for older buttons/links
+function loadAttendanceSheet() { onAttClassChange(); }
+
+// The sheet lists the class's current students by roll number. If attendance
+// was already saved for that date, it is pre-filled and saving again updates it.
+function renderAttendanceSheet() {
+  const classId = document.getElementById('attClassSelect').value;
+  const date = document.getElementById('attDate').value;
   const cls = classesCache.find((c) => c.id === classId);
-  const students = studentsCache.filter((s) => cls?.studentIds.includes(s.id));
-  document.getElementById('attRows').innerHTML = students.map((s) => `
-    <tr>
-      <td>${s.name}</td>
+  const students = studentsCache.filter((s) => cls?.studentIds.includes(s.id)).sort(byRoll);
+  const saved = Object.fromEntries(attHistoryCache.filter((r) => r.date === date).map((r) => [r.studentId, r.status]));
+  document.getElementById('attSheetHint').textContent = Object.keys(saved).length
+    ? `Attendance for ${date} is already saved — change anything and save again to update it.`
+    : '';
+  document.getElementById('attRows').innerHTML = students.map((s) => {
+    const st = saved[s.id] || 'present';
+    return `<tr>
+      <td><b>${escapeHtml(s.rollNumber || '-')}</b></td>
+      <td>${escapeHtml(s.name)}</td>
       <td>
         <select data-student="${s.id}" class="att-status">
-          <option value="present">Present</option>
-          <option value="absent">Absent</option>
-          <option value="late">Late</option>
+          <option value="present" ${st === 'present' ? 'selected' : ''}>Present</option>
+          <option value="absent" ${st === 'absent' ? 'selected' : ''}>Absent</option>
+          <option value="late" ${st === 'late' ? 'selected' : ''}>Late</option>
         </select>
       </td>
-    </tr>
-  `).join('') || '<tr><td colspan="2" style="color:var(--muted)">No students enrolled in this class.</td></tr>';
-  loadAttendanceHistory();
+    </tr>`;
+  }).join('') || '<tr><td colspan="3" style="color:var(--muted)">No students enrolled in this class.</td></tr>';
+}
+function markAll(status) {
+  document.querySelectorAll('.att-status').forEach((sel) => { sel.value = status; });
 }
 async function submitAttendance() {
   const classId = document.getElementById('attClassSelect').value;
   const date = document.getElementById('attDate').value;
+  if (!classId) { alert('Choose a class.'); return; }
+  if (!date) { alert('Choose a date.'); return; }
   const records = [...document.querySelectorAll('.att-status')].map((sel) => ({
     studentId: sel.dataset.student, status: sel.value
   }));
-  await api('/teacher/attendance', { method: 'POST', body: { classId, date, records } });
-  toast('Attendance saved');
-  loadAttendanceHistory();
+  if (!records.length) { alert('No students in this class.'); return; }
+  try {
+    await api('/teacher/attendance', { method: 'POST', body: { classId, date, records } });
+    toast('Attendance saved');
+    onAttClassChange();
+  } catch (e) { alert(e.message); }
 }
-async function loadAttendanceHistory() {
-  const classId = document.getElementById('attClassSelect').value;
-  const rows = await api(`/teacher/attendance?classId=${classId}`);
-  document.getElementById('attHistoryRows').innerHTML = rows.map((r) => {
-    const s = studentsCache.find((x) => x.id === r.studentId);
-    return `<tr><td>${r.date}</td><td>${s?.name || r.studentId}</td><td>${r.status}</td></tr>`;
-  }).join('') || '<tr><td colspan="3" style="color:var(--muted)">No attendance recorded yet.</td></tr>';
+async function loadAttendanceHistory() { onAttClassChange(); }
+function clearAttFilters() {
+  ['attFrom', 'attTo', 'attStatusFilter', 'attSearch'].forEach((id) => { document.getElementById(id).value = ''; });
+  renderAttendanceHistory();
+}
+function renderAttendanceHistory() {
+  const from = document.getElementById('attFrom').value;
+  const to = document.getElementById('attTo').value;
+  const sf = document.getElementById('attStatusFilter').value;
+  const q = lc(document.getElementById('attSearch').value.trim());
+  const rows = attHistoryCache
+    .filter((r) => (!from || r.date >= from) && (!to || r.date <= to))
+    .filter((r) => !sf || r.status === sf)
+    .filter((r) => !q || lc(r.studentName).includes(q) || lc(r.studentRoll).includes(q));
+  const count = (s) => rows.filter((r) => r.status === s).length;
+  const days = new Set(rows.map((r) => r.date)).size;
+  document.getElementById('attSummary').innerHTML = rows.length ? `
+    <div class="summary-pill"><b>${days}</b>day(s)</div>
+    <div class="summary-pill ok"><b>${count('present')}</b>present</div>
+    <div class="summary-pill warn"><b>${count('late')}</b>late</div>
+    <div class="summary-pill danger"><b>${count('absent')}</b>absent</div>
+    <div class="summary-pill"><b>${Math.round(((count('present') + count('late')) / rows.length) * 100)}%</b>attendance</div>` : '';
+  const badge = (s) => `<span class="badge ${s === 'present' ? 'ok' : s === 'late' ? 'warn' : 'danger'}">${escapeHtml(s)}</span>`;
+  document.getElementById('attHistoryRows').innerHTML = rows.map((r) => `
+    <tr><td>${escapeHtml(r.date)}</td><td><b>${escapeHtml(r.studentRoll || '-')}</b></td><td>${escapeHtml(r.studentName)}</td><td>${badge(r.status)}</td></tr>
+  `).join('') || `<tr><td colspan="4" style="color:var(--muted)">${attHistoryCache.length ? 'No records match your filters.' : 'No attendance recorded yet.'}</td></tr>`;
 }
 
-// ---------------- Proctoring reports ----------------------------------------------
+// ---------------- Proctoring reports (view only — detection is unchanged) -----------
+let prCache = [];
 async function loadProctoringView() {
-  if (!quizzesCache.length) quizzesCache = await api('/teacher/quizzes');
-  const sel = document.getElementById('proctorQuizSelect');
-  sel.innerHTML = `<option value="">All quizzes</option>` + quizzesCache.map((q) => `<option value="${q.id}">${q.title}</option>`).join('');
-  sel.onchange = () => loadProctorEvents(sel.value);
-  loadProctorEvents('');
+  [quizzesCache, classesCache] = await Promise.all([api('/teacher/quizzes'), api('/teacher/classes')]);
+  fillClassFilter('prClass');
+  document.getElementById('prClass').onchange = () => { fillProctorQuizzes(); renderProctorEvents(); };
+  document.getElementById('proctorQuizSelect').onchange = renderProctorEvents;
+  document.getElementById('prType').onchange = renderProctorEvents;
+  document.getElementById('prSearch').oninput = renderProctorEvents;
+  fillProctorQuizzes();
+  loadProctorEvents();
 }
-async function loadProctorEvents(quizId) {
-  const events = await api(`/teacher/proctoring/events${quizId ? `?quizId=${quizId}` : ''}`);
+function fillProctorQuizzes() {
+  const cf = document.getElementById('prClass').value;
+  const sel = document.getElementById('proctorQuizSelect');
+  const keep = sel.value;
+  sel.innerHTML = '<option value="">All quizzes</option>' + quizzesCache
+    .filter((q) => !cf || q.classId === cf)
+    .map((q) => `<option value="${q.id}">${escapeHtml(q.title)}</option>`).join('');
+  if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+}
+async function loadProctorEvents() {
+  prCache = await api('/teacher/proctoring/events');
+  const typeSel = document.getElementById('prType');
+  const keep = typeSel.value;
+  const types = [...new Set(prCache.map((e) => e.type))].sort();
+  typeSel.innerHTML = '<option value="">All events</option>' + types.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t.replace(/_/g, ' '))}</option>`).join('');
+  if (types.includes(keep)) typeSel.value = keep;
+  renderProctorEvents();
+}
+function renderProctorEvents() {
+  const cf = document.getElementById('prClass').value;
+  const qf = document.getElementById('proctorQuizSelect').value;
+  const tf = document.getElementById('prType').value;
+  const q = lc(document.getElementById('prSearch').value.trim());
+  const events = prCache
+    .filter((e) => (!cf || e.classId === cf) && (!qf || e.quizId === qf) && (!tf || e.type === tf))
+    .filter((e) => !q || [e.studentName, e.studentRoll, e.quizTitle, e.className].some((v) => lc(v).includes(q)));
+  const high = events.filter((e) => severityClass(e.type) === 'danger').length;
+  document.getElementById('prSummary').innerHTML = prCache.length ? `
+    <div class="summary-pill"><b>${events.length}</b>alerts</div>
+    <div class="summary-pill danger"><b>${high}</b>high severity</div>
+    <div class="summary-pill"><b>${new Set(events.map((e) => e.studentId)).size}</b>students flagged</div>
+    <div class="summary-pill"><b>${events.filter((e) => e.evidenceFile).length}</b>with image</div>` : '';
   document.getElementById('proctorRows').innerHTML = events.map((ev) => `
     <tr>
       <td>${fmtDate(ev.timestamp)}</td>
-      <td>${ev.studentName || ev.studentId}</td>
-      <td><span class="badge ${severityClass(ev.type)}">${ev.type.replace(/_/g, ' ')}</span></td>
+      <td>${escapeHtml(ev.studentName || ev.studentId)}</td>
+      <td><b>${escapeHtml(ev.studentRoll || '-')}</b></td>
+      <td>${escapeHtml(ev.className || '-')}</td>
+      <td>${escapeHtml(ev.quizTitle || '-')}</td>
+      <td><span class="badge ${severityClass(ev.type)}">${escapeHtml(ev.type.replace(/_/g, ' '))}</span></td>
       <td>${ev.confidence ? Math.round(ev.confidence * 100) + '%' : '-'}</td>
       <td>${ev.evidenceFile ? `<a href="#" onclick="viewEvidence('${ev.evidenceFile}');return false;">View</a> &nbsp;|&nbsp; <a href="#" style="color:var(--danger)" onclick="deleteEvidenceImage('${ev.id}');return false;">Delete image</a>` : '-'}</td>
     </tr>
-  `).join('') || '<tr><td colspan="5" style="color:var(--muted)">No proctoring alerts recorded.</td></tr>';
+  `).join('') || `<tr><td colspan="8" style="color:var(--muted)">${prCache.length ? 'No alerts match your filters.' : 'No proctoring alerts recorded.'}</td></tr>`;
 }
 async function deleteEvidenceImage(eventId) {
   if (!confirm('Delete this proctoring image? The alert stays in the report; only the picture is removed.')) return;
   try {
     await api(`/teacher/proctoring/events/${eventId}/evidence`, { method: 'DELETE' });
-    loadProctorEvents(document.getElementById('proctorQuizSelect').value);
+    loadProctorEvents();
   } catch (e) { alert(e.message); }
 }
 function severityClass(type) {
@@ -702,10 +890,32 @@ function viewEvidence(filename) {
 let socket = null;
 const liveState = {}; // studentId -> {name, events:[]}
 
-async function loadLiveView() {
-  if (!quizzesCache.length) quizzesCache = await api('/teacher/quizzes');
+// Quiz picker with class filter + title search. Picking a quiz calls watchQuiz()
+// exactly as before; the live socket code below is unchanged.
+function fillLiveQuizzes() {
+  const cf = document.getElementById('liveClass').value;
+  const q = lc(document.getElementById('liveSearch').value.trim());
   const sel = document.getElementById('liveQuizSelect');
-  sel.innerHTML = quizzesCache.filter((q) => q.published).map((q) => `<option value="${q.id}">${q.title}</option>`).join('');
+  const keep = sel.value;
+  const list = quizzesCache.filter((x) => x.published && (!cf || x.classId === cf) && (!q || lc(x.title).includes(q)));
+  sel.innerHTML = list.map((x) => `<option value="${x.id}">${escapeHtml(x.title)}${cf ? '' : ` — ${escapeHtml(classNameOf(x.classId))}`}</option>`).join('')
+    || '<option value="">No matching published quiz</option>';
+  if ([...sel.options].some((o) => o.value === keep && keep)) sel.value = keep;
+  return sel.value !== keep;
+}
+async function loadLiveView() {
+  [quizzesCache, classesCache] = await Promise.all([api('/teacher/quizzes'), api('/teacher/classes')]);
+  fillClassFilter('liveClass');
+  const sel = document.getElementById('liveQuizSelect');
+  const refilter = () => {
+    if (fillLiveQuizzes()) {
+      if (sel.value) watchQuiz(sel.value);
+      else { Object.keys(liveState).forEach((k) => delete liveState[k]); renderLiveGrid(); }
+    }
+  };
+  document.getElementById('liveClass').onchange = refilter;
+  document.getElementById('liveSearch').oninput = refilter;
+  fillLiveQuizzes();
   sel.onchange = () => watchQuiz(sel.value);
   if (!socket) {
     socket = io(window.API_BASE || undefined, { auth: { token: Session.token } });

@@ -22,11 +22,52 @@ function myClasses(studentId) {
   return db.classes.find((c) => c.studentIds.includes(studentId));
 }
 
+// Classes the student is CURRENTLY in: if a teacher (or an admin) removed the
+// student from that teacher, the teacher's classes no longer show up here.
+// (Used for the student's lists/dashboards only.)
+function activeClasses(studentId) {
+  const me = db.users.findById(studentId);
+  const linked = (c) => !Array.isArray(me?.teacherIds) || me.teacherIds.includes(c.teacherId);
+  return myClasses(studentId).filter(linked);
+}
+
+const teacherName = (tid) => db.users.findById(tid)?.name || '';
+const isDone = (a) => a && a.status !== 'in-progress';
+
+/** completed | in-progress | available | upcoming | missed */
+function quizState(q, attempt, now = new Date()) {
+  if (isDone(attempt)) return 'completed';
+  const notYet = q.startTime && new Date(q.startTime) > now;
+  const closed = q.endTime && now > new Date(q.endTime);
+  if (closed) return 'missed';
+  if (attempt) return 'in-progress';
+  return notYet ? 'upcoming' : 'available';
+}
+
+function quizSummary(q, studentId, cls, now) {
+  const attempt = db.attempts.findOne((a) => a.quizId === q.id && a.studentId === studentId);
+  return {
+    id: q.id,
+    title: q.title,
+    classId: q.classId,
+    className: cls?.name || '',
+    teacherName: teacherName(q.teacherId),
+    durationMinutes: q.durationMinutes,
+    questionCount: q.questions.length,
+    startTime: q.startTime,
+    endTime: q.endTime,
+    state: quizState(q, attempt, now),
+    score: isDone(attempt) ? attempt.score : null,
+    totalMarks: isDone(attempt) ? attempt.totalMarks : null,
+    submittedAt: isDone(attempt) ? attempt.submittedAt : null
+  };
+}
+
 // ---- Profile --------------------------------------------------------------
 router.get('/profile', (req, res) => {
   const me = db.users.findById(req.user.id);
   const college = me.collegeId ? db.colleges.findById(me.collegeId) : null;
-  const classes = myClasses(me.id).map((c) => ({
+  const classes = activeClasses(me.id).map((c) => ({
     id: c.id,
     name: c.name,
     teacherName: db.users.findById(c.teacherId)?.name || ''
@@ -47,27 +88,58 @@ router.get('/profile', (req, res) => {
 
 // ---- Assigned quizzes ---------------------------------------------------
 router.get('/quizzes', (req, res) => {
-  const classIds = myClasses(req.user.id).map((c) => c.id);
+  const classes = Object.fromEntries(activeClasses(req.user.id).map((c) => [c.id, c]));
   const now = new Date();
   const quizzes = db.quizzes
-    .find((q) => classIds.includes(q.classId) && q.published)
+    .find((q) => classes[q.classId] && q.published)
     .map((q) => {
       const attempt = db.attempts.findOne((a) => a.quizId === q.id && a.studentId === req.user.id);
       const windowOpen =
         (!q.startTime || new Date(q.startTime) <= now) && (!q.endTime || now <= new Date(q.endTime));
       return {
-        id: q.id,
-        title: q.title,
+        ...quizSummary(q, req.user.id, classes[q.classId], now),
         description: q.description,
-        durationMinutes: q.durationMinutes,
-        startTime: q.startTime,
-        endTime: q.endTime,
-        questionCount: q.questions.length,
         windowOpen,
         attemptStatus: attempt ? attempt.status : 'not-started'
       };
     });
   res.json(quizzes);
+});
+
+// ---- My classes: each class with its teacher, quiz counts and attendance -------
+// Deleted quizzes are simply gone, so the counts go down automatically.
+router.get('/classes', (req, res) => {
+  const now = new Date();
+  const out = activeClasses(req.user.id).map((c) => {
+    const quizzes = db.quizzes
+      .find((q) => q.classId === c.id && q.published)
+      .map((q) => quizSummary(q, req.user.id, c, now))
+      .sort((a, b) => String(b.startTime || '').localeCompare(String(a.startTime || '')));
+    const count = (s) => quizzes.filter((q) => q.state === s).length;
+    const att = db.attendance.find((a) => a.classId === c.id && a.studentId === req.user.id);
+    const done = quizzes.filter((q) => q.state === 'completed' && q.totalMarks);
+    return {
+      id: c.id,
+      name: c.name,
+      teacherName: teacherName(c.teacherId),
+      classmates: c.studentIds.length,
+      quizzes,
+      counts: {
+        total: quizzes.length, completed: count('completed'), missed: count('missed'),
+        available: count('available'), inProgress: count('in-progress'), upcoming: count('upcoming')
+      },
+      averagePercent: done.length
+        ? Math.round(done.reduce((s, q) => s + (q.score / q.totalMarks) * 100, 0) / done.length)
+        : null,
+      attendance: {
+        total: att.length,
+        present: att.filter((a) => a.status === 'present').length,
+        late: att.filter((a) => a.status === 'late').length,
+        absent: att.filter((a) => a.status === 'absent').length
+      }
+    };
+  });
+  res.json(out);
 });
 
 // Quiz questions WITHOUT correct answers - used to render the quiz UI
@@ -177,17 +249,39 @@ router.post('/attempts/:id/submit', async (req, res) => {
 });
 
 // ---- Results & attendance ------------------------------------------------
+// Results of quizzes that still exist (a deleted quiz's result disappears with it),
+// with class and teacher name, newest first.
 router.get('/results', (req, res) => {
   const attempts = db.attempts.find((a) => a.studentId === req.user.id && a.submittedAt);
-  const withTitles = attempts.map((a) => {
+  const rows = [];
+  for (const a of attempts) {
     const quiz = db.quizzes.findById(a.quizId);
-    return { ...a, quizTitle: quiz?.title };
-  });
-  res.json(withTitles);
+    if (!quiz) continue;
+    const cls = db.classes.findById(quiz.classId);
+    const { answers, ...rest } = a;
+    rows.push({
+      ...rest,
+      quizTitle: quiz.title,
+      classId: quiz.classId,
+      className: cls?.name || '',
+      teacherName: teacherName(quiz.teacherId),
+      percent: a.totalMarks ? Math.round((a.score / a.totalMarks) * 100) : null
+    });
+  }
+  rows.sort((x, y) => String(y.submittedAt).localeCompare(String(x.submittedAt)));
+  res.json(rows);
 });
 
+// Attendance with class and teacher name, newest first.
 router.get('/attendance', (req, res) => {
-  res.json(db.attendance.find((a) => a.studentId === req.user.id));
+  const rows = [];
+  for (const a of db.attendance.find((x) => x.studentId === req.user.id)) {
+    const cls = db.classes.findById(a.classId);
+    if (!cls) continue;
+    rows.push({ ...a, className: cls.name, teacherName: teacherName(cls.teacherId) });
+  }
+  rows.sort((x, y) => y.date.localeCompare(x.date));
+  res.json(rows);
 });
 
 module.exports = router;
