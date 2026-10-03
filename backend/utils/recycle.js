@@ -7,14 +7,23 @@
  * restore it from there (see routes/admin.js).
  *
  * A trash record looks like:
- *   { id, teacherId, kind: 'class' | 'quiz' | 'image', label, by, deletedAt,
+ *   { id, collegeId, teacherId, kind, label, by, deletedAt,
  *     counts: {...}, payload: { classes, quizzes, attempts, proctorEvents,
  *                               attendance, images:[{filename,eventId}] } }
+ *   kind: 'class' | 'quiz' | 'image' | 'student_unlink'      (teacher / bulk delete)
+ *         'admin_teacher' | 'admin_student' | 'admin_college' (account removals)
+ *   by:   'teacher' | 'college_admin' | 'global'  ('admin' = global, older records)
+ * A college admin can only restore records of their own college that were NOT
+ * deleted by the global admin; the global admin can restore everything.
  * Screenshots themselves are moved to the `evidenceTrash` collection (not
  * copied into the record) so a record never gets too big.
  */
 const db = require('../db');
 const { id } = require('./helpers');
+const { validateCollege } = require('./college');
+
+/** Was this deleted by the global (platform) admin? Only they can restore it. */
+const isGlobalDeletion = (by) => by === 'global' || by === 'admin';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -22,14 +31,17 @@ const DAY = 24 * 60 * 60 * 1000;
 //   users       -> the removed account(s), so they can be re-created
 //   enrollments -> [{classId, studentId}] class memberships to put back
 //   links       -> [{studentId, teacherId}] student<->teacher links to put back
+// colleges -> a removed college record (only for 'admin_college')
 const emptyPayload = () => ({
-  classes: [], quizzes: [], attempts: [], proctorEvents: [], attendance: [], images: [],
+  colleges: [], classes: [], quizzes: [], attempts: [], proctorEvents: [], attendance: [], images: [],
   users: [], enrollments: [], links: []
 });
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
 function countsOf(p) {
   return {
+    colleges: (p.colleges || []).length,
+    adminAccounts: (p.users || []).filter((u) => u.role === 'admin').length,
     classes: p.classes.length,
     quizzes: p.quizzes.length,
     attempts: p.attempts.length,
@@ -42,7 +54,7 @@ function countsOf(p) {
   };
 }
 function sumCounts(list) {
-  const t = { classes: 0, quizzes: 0, attempts: 0, proctorEvents: 0, attendance: 0, images: 0, teacherAccounts: 0, studentAccounts: 0, enrollments: 0 };
+  const t = { colleges: 0, adminAccounts: 0, classes: 0, quizzes: 0, attempts: 0, proctorEvents: 0, attendance: 0, images: 0, teacherAccounts: 0, studentAccounts: 0, enrollments: 0 };
   for (const c of list) for (const k of Object.keys(t)) t[k] += c[k] || 0;
   return t;
 }
@@ -101,14 +113,21 @@ async function removeLive(kind, p) {
     const current = Array.isArray(st.teacherIds) ? st.teacherIds : (st.createdBy === l.teacherId ? [l.teacherId] : []);
     await db.users.update(st.id, { teacherIds: current.filter((t) => t !== l.teacherId) });
   }
-  // the removed account(s) themselves
+  // the removed account(s) themselves, and a removed college
   await db.users.removeMany((p.users || []).map((u) => u.id));
+  await db.colleges.removeMany((p.colleges || []).map((c) => c.id));
 }
 
 /** Delete a unit but keep it recoverable in the recycle bin. */
-async function trashUnit({ teacherId, kind, label, by, payload }) {
-  const teacherName = (teacherId && db.users.findById(teacherId)?.name) || null; // kept in case the teacher is later removed
-  const rec = { id: id(), teacherId: teacherId || null, teacherName, kind, label, by, deletedAt: new Date().toISOString(), counts: countsOf(payload), payload };
+async function trashUnit({ collegeId, teacherId, kind, label, by, payload }) {
+  const teacher = teacherId ? db.users.findById(teacherId) : null;
+  const teacherName = teacher?.name || null; // kept in case the teacher is later removed
+  const rec = {
+    id: id(),
+    collegeId: collegeId || teacher?.collegeId || null,
+    teacherId: teacherId || null, teacherName, kind, label, by,
+    deletedAt: new Date().toISOString(), counts: countsOf(payload), payload
+  };
   await db.trash.insert(rec);
   for (const img of payload.images) await db.trashEvidence(img.filename, rec.id);
   await removeLive(kind, payload);
@@ -152,18 +171,18 @@ function studentTeacherIds(st) {
 }
 
 /** Admin removes a student: the account and everything of theirs, for every teacher. */
-function removeStudentByAdmin(student, by = 'admin') {
+function removeStudentByAdmin(student, by = 'global') {
   const payload = emptyPayload();
   payload.users.push(clone(student));
   attemptsAndEvents(payload, db.attempts.find((a) => a.studentId === student.id), (e) => e.studentId === student.id);
   payload.attendance.push(...clone(db.attendance.find((a) => a.studentId === student.id)));
   for (const c of db.classes.find((c) => c.studentIds.includes(student.id))) payload.enrollments.push({ classId: c.id, studentId: student.id });
-  return trashUnit({ teacherId: null, kind: 'admin_student', label: `${student.name} (${student.loginId})`, by, payload });
+  return trashUnit({ collegeId: student.collegeId, teacherId: null, kind: 'admin_student', label: `${student.name} (${student.loginId})`, by, payload });
 }
 
 /** Admin removes a teacher: the account and all of their classes, quizzes, results,
  *  attendance and proctoring data. Students stay, but lose the link to this teacher. */
-function removeTeacherByAdmin(teacher, by = 'admin') {
+function removeTeacherByAdmin(teacher, by = 'global') {
   const payload = emptyPayload();
   payload.users.push(clone(teacher));
   for (const c of db.classes.find((c) => c.teacherId === teacher.id)) addClass(payload, c.id);
@@ -171,7 +190,34 @@ function removeTeacherByAdmin(teacher, by = 'admin') {
   for (const st of db.users.find((u) => u.role === 'student' && studentTeacherIds(u).includes(teacher.id))) {
     payload.links.push({ studentId: st.id, teacherId: teacher.id });
   }
-  return trashUnit({ teacherId: teacher.id, kind: 'admin_teacher', label: `${teacher.name} (${teacher.loginId})`, by, payload });
+  return trashUnit({ collegeId: teacher.collegeId, teacherId: teacher.id, kind: 'admin_teacher', label: `${teacher.name} (${teacher.loginId})`, by, payload });
+}
+
+/** Global admin removes a whole college: the college, its college admin, every
+ *  teacher and student, and all their classes, quizzes, results, attendance and
+ *  proctoring data/images. Restorable (as one unit) by the global admin only. */
+function removeCollege(college, by = 'global') {
+  const payload = emptyPayload();
+  payload.colleges.push(clone(college));
+  const members = db.users.find((u) => u.collegeId === college.id);
+  payload.users.push(...clone(members));
+  const teacherIds = new Set(members.filter((u) => u.role === 'teacher').map((u) => u.id));
+  const studentIds = new Set(members.filter((u) => u.role === 'student').map((u) => u.id));
+  for (const c of db.classes.find((c) => teacherIds.has(c.teacherId))) addClass(payload, c.id);
+  for (const q of db.quizzes.find((q) => teacherIds.has(q.teacherId))) addQuiz(payload, q.id);
+  // anything of these students that is not inside a class/quiz already collected
+  attemptsAndEvents(payload, db.attempts.find((a) => studentIds.has(a.studentId) && !payload.attempts.some((x) => x.id === a.id)),
+    (e) => studentIds.has(e.studentId) && !payload.proctorEvents.some((x) => x.id === e.id));
+  const haveAtt = new Set(payload.attendance.map((a) => a.id));
+  payload.attendance.push(...clone(db.attendance.find((a) => studentIds.has(a.studentId) && !haveAtt.has(a.id))));
+  // de-duplicate (a quiz's events can be reached both through its class and its students)
+  for (const key of ['attempts', 'proctorEvents', 'attendance']) {
+    const seen = new Set();
+    payload[key] = payload[key].filter((x) => (seen.has(x.id) ? false : seen.add(x.id)));
+  }
+  const seenImg = new Set();
+  payload.images = payload.images.filter((i) => (seenImg.has(i.filename) ? false : seenImg.add(i.filename)));
+  return trashUnit({ collegeId: college.id, teacherId: null, kind: 'admin_college', label: `${college.name} (${college.shortName})`, by, payload });
 }
 
 /** A teacher removes a student from *their* students only. The student account stays
@@ -245,7 +291,7 @@ async function executeDelete(units, { by, permanent }) {
 
 // ---- Restore ------------------------------------------------------------------------
 // Order in which a batch is restored (accounts first, single images last)
-const KIND_ORDER = { admin_teacher: 0, admin_student: 1, class: 2, quiz: 3, student_unlink: 4, image: 5 };
+const KIND_ORDER = { admin_college: -1, admin_teacher: 0, admin_student: 1, class: 2, quiz: 3, student_unlink: 4, image: 5 };
 
 /** Puts one recycle-bin record back. Returns { ok, reason?, counts?, warnings? } */
 async function restoreUnit(rec) {
@@ -269,7 +315,10 @@ async function restoreUnit(rec) {
     return { ok: true, counts: { images: n }, warnings };
   }
 
-  const accountKind = kind === 'admin_teacher' || kind === 'admin_student';
+  if (kind !== 'admin_college' && rec.collegeId && !db.colleges.findById(rec.collegeId)) {
+    return fail('Its college is removed — restore the college first');
+  }
+  const accountKind = kind === 'admin_teacher' || kind === 'admin_student' || kind === 'admin_college';
   if (!accountKind && !db.users.findById(rec.teacherId)) {
     return fail('The teacher account is removed — restore the teacher first');
   }
@@ -277,17 +326,38 @@ async function restoreUnit(rec) {
     return fail('The student account is removed — restore the student first');
   }
 
-  // 1) the account(s)
+  // 0) a removed college: its name / short name must still be free
   const counts = {};
+  for (const c of p.colleges || []) {
+    if (db.colleges.findById(c.id)) continue;
+    const v = validateCollege(c, c.id);
+    if (v.error) return fail(v.error.replace('already exists', 'already exists — rename one of them first'));
+  }
+  // check every account before inserting anything, so a clash never leaves a half-restored unit
   for (const u of p.users || []) {
     if (db.users.findById(u.id)) continue;
     const clash = db.users.findOne((x) =>
       x.id !== u.id &&
       ((u.email && x.email && x.email.toLowerCase() === u.email.toLowerCase()) || (u.loginId && x.loginId === u.loginId)));
     if (clash) return fail(`Another account already uses ${u.email || u.loginId}`);
-    const doc = u.role === 'student' && Array.isArray(u.teacherIds)
+  }
+  for (const c of p.colleges || []) if (!db.colleges.findById(c.id)) await db.colleges.insert(c);
+  counts.colleges = (p.colleges || []).length;
+
+  // 1) the account(s)
+  for (const u of p.users || []) {
+    if (db.users.findById(u.id)) continue;
+    let doc = u.role === 'student' && Array.isArray(u.teacherIds)
       ? { ...u, teacherIds: u.teacherIds.filter((t) => db.users.findById(t)) }
-      : u;
+      : { ...u };
+    // records saved before colleges existed: put the account in the record's college
+    if (!doc.collegeId && doc.role !== 'admin' && rec.collegeId) {
+      const college = db.colleges.findById(rec.collegeId);
+      doc.collegeId = rec.collegeId;
+      if (doc.role === 'student' && college && /^\d+$/.test(String(doc.rollNumber || ''))) {
+        doc = { ...doc, rollSeq: Number(doc.rollNumber), rollNumber: `${college.shortName}${doc.rollNumber}` };
+      }
+    }
     await db.users.insert(doc);
   }
   counts.accounts = (p.users || []).length;
@@ -335,8 +405,8 @@ async function restoreUnit(rec) {
 }
 
 module.exports = {
-  trashQuiz, trashClass, trashImage,
-  removeStudentByAdmin, removeTeacherByAdmin, unlinkStudent, KIND_ORDER,
+  trashQuiz, trashClass, trashImage, isGlobalDeletion,
+  removeStudentByAdmin, removeTeacherByAdmin, removeCollege, unlinkStudent, KIND_ORDER,
   cutoffFor, buildDeletePlan, executeDelete, restoreUnit,
   countsOf, sumCounts
 };

@@ -88,9 +88,27 @@ router.post(
   }
 );
 
+// May this teacher/admin see this quiz's proctoring data?
+//   teacher       -> only their own quizzes
+//   college admin -> quizzes of teachers in their college
+//   global admin  -> everything
+function canViewQuiz(user, quiz) {
+  if (!quiz) return false;
+  if (user.role === 'teacher') return quiz.teacherId === user.id;
+  if (user.role === 'admin') {
+    if (!user.collegeId) return true;
+    return db.users.findById(quiz.teacherId)?.collegeId === user.collegeId;
+  }
+  return false;
+}
+
 // Teacher/admin views the evidence image for an event
 router.get('/evidence/:filename', authRequired, requireRole('teacher', 'admin'), async (req, res) => {
   const filename = path.basename(req.params.filename);
+  const event = db.proctorEvents.findOne((e) => e.evidenceFile === filename);
+  if (!event || !canViewQuiz(req.user, db.quizzes.findById(event.quizId))) {
+    return res.status(404).json({ error: 'Not found' });
+  }
   try {
     const found = await db.getEvidence(filename);
     if (found) {
@@ -106,4 +124,5 @@ router.get('/evidence/:filename', authRequired, requireRole('teacher', 'admin'),
   res.status(404).json({ error: 'Not found' });
 });
 
+router.canViewQuiz = canViewQuiz;
 module.exports = router;

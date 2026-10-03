@@ -7,7 +7,7 @@ computer, anywhere, can log into.
 
 ```
 Admin (anywhere) ──┐
-Teacher (anywhere) ─┼──► https://classroom-bv1z.onrender.com ──► Node/Express API ──► db.json (or MongoDB)
+Teacher (anywhere) ─┼──► https://yourapp.com ──► Node/Express API ──► db.json (or MongoDB)
 Student (anywhere) ─┘                                   │
                                                     uploads/evidence (proctoring snapshots)
 ```
@@ -26,6 +26,36 @@ Student (anywhere) ─┘                                   │
 | Console/GUI teacher menu | Real teacher web dashboard: classes, students, quizzes, results, attendance, proctoring reports, **live monitor** (Socket.IO) |
 | No admin invite flow | Admin creates a teacher from anywhere with just their name + email → gets a login ID + temp password to hand over |
 
+## Multiple colleges on one deployment
+
+Several colleges can use the same site at the same time without their data
+mixing:
+
+```
+Global admin (bootstrap ADMIN001)
+ ├── College A (e.g. JIIT) ── college admin ── teachers ── students (JIIT1, JIIT2 …)
+ └── College B (e.g. AU)   ── college admin ── teachers ── students (AU1, AU2 …)
+```
+
+- **Global admin** — the bootstrap admin. Adds colleges (name + unique short
+  name + one college admin), can suspend/remove a whole college, and sees and
+  manages every college's teachers, students and data.
+- **College admin** — signs in from the same *Admin* tab. Sees only their own
+  college. Everything they add goes into their college automatically. Their
+  deletions always go to the recycle bin; they cannot restore what the global
+  admin deleted, but the global admin can restore anything.
+- **Teachers / students** belong to one college. Teachers can only see and pick
+  students of their own college. Roll numbers are generated per college
+  (short name + running number).
+- Suspending a college locks out its admin, teachers and students immediately.
+  Removing a college moves the college and all its data to the recycle bin.
+
+**Upgrading an existing deployment:** on the first start, every existing
+teacher/student is moved into one college named by `LEGACY_COLLEGE_NAME`
+(default "My College", short name `MC`), and old roll numbers 1, 2, 3 become
+MC1, MC2, MC3. Then, as the global admin: *Colleges → Edit* to rename it (e.g.
+to JIIT — roll numbers follow) and *Create admin* to give it a college admin.
+
 ## Project layout
 
 ```
@@ -34,6 +64,7 @@ ProctoredQuizWeb/
 │   ├── server.js
 │   ├── db.js            file-based JSON "database" (swap for MongoDB later, see below)
 │   ├── routes/           auth.js, admin.js, teacher.js, student.js, proctor.js
+│   ├── utils/college.js  colleges, per-college roll numbers, upgrade migration
 │   ├── middleware/auth.js
 │   ├── data/db.json      created automatically on first run
 │   └── uploads/evidence/ proctoring evidence snapshots
@@ -102,10 +133,8 @@ Every route only ever talks to `db.<collection>.find/findOne/insert/update/remov
 
 - Set a long random `JWT_SECRET` in production, never the example value.
 - Put this behind HTTPS (Render/Railway give you this automatically).
-- The evidence endpoint (`GET /api/proctor/evidence/:file`) currently
-  checks the requester is *a* teacher/admin, not specifically *that
-  student's* teacher — fine for a single-institution deployment; add an
-  ownership check if you'll host multiple unrelated institutions.
+- Proctoring evidence images and the live monitor are restricted to the quiz's
+  own teacher, that college's admin, and the global admin.
 - Consider rate-limiting `/api/auth/login` against brute-forcing.
 
 ## Known browser limitations (same as any web-based proctoring system)

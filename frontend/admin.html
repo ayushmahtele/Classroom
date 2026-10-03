@@ -16,29 +16,42 @@
     <div class="brand"><img src="img/logo.png" alt="" />Class<span>room</span></div>
     <nav>
       <button class="nav-btn active" data-view="overview">📊 Overview</button>
+      <button class="nav-btn global-only" data-view="colleges" style="display:none">🏛 Colleges</button>
       <button class="nav-btn" data-view="teachers">🧑‍🏫 Teachers</button>
       <button class="nav-btn" data-view="students">🎓 All Students</button>
       <button class="nav-btn" data-view="restore">♻️ Restore Data</button>
       <button class="nav-btn" data-view="delete">🗑 Delete Data</button>
     </nav>
     <div style="margin-top:40px" class="who" id="whoBox"></div>
+    <div class="who-college" id="whoCollege"></div>
     <button class="nav-btn logout" onclick="logout()">🚪 Log out</button>
   </div>
 
   <div class="main">
     <!-- Overview -->
     <section id="view-overview">
-      <h2>Platform Overview</h2>
+      <h2 id="overviewTitle">Overview</h2>
       <div class="grid-stats" id="statsGrid"></div>
-      <div class="panel">
-        <h3>How adding a teacher works</h3>
-        <p style="color:var(--muted);font-size:14px">
-          Click <b>Teachers → + Add Teacher</b>, enter their name, email and pick their department(s) (CSE, IT, ECE, CIVIL).
-          The platform creates their account instantly with a temporary password and a
-          Teacher ID (e.g. <code>TCH1024</code>). Share those credentials with the teacher
-          however you like (email, WhatsApp, in person) — they can then log in from any
-          computer, anywhere, and will be asked to set their own password on first login.
-        </p>
+      <div id="perCollegeBox"></div>
+      <div class="panel" id="howToPanel"></div>
+    </section>
+
+    <!-- Colleges (global admin only) -->
+    <section id="view-colleges" style="display:none">
+      <div class="topbar">
+        <h2 style="margin:0">Colleges</h2>
+        <button class="btn" onclick="openAddCollege()">+ Add College</button>
+      </div>
+      <p style="color:var(--muted);font-size:14px;margin-top:-6px">
+        Every college has its own college admin and its own teachers, students, classes, quizzes and proctoring data.
+        Suspending a college blocks sign-in for its admin, teachers and students. Removing a college deletes all of its data
+        (restorable from <b>Restore Data → Admin's removals</b>).
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>College</th><th>Short name</th><th>College admin</th><th>Teachers</th><th>Students</th><th>Next roll no.</th><th>Status</th><th></th></tr></thead>
+          <tbody id="collegeRows"></tbody>
+        </table>
       </div>
     </section>
 
@@ -46,39 +59,51 @@
     <section id="view-teachers" style="display:none">
       <div class="topbar">
         <h2 style="margin:0">Teachers</h2>
-        <button class="btn" onclick="openAddTeacher()">+ Add Teacher</button>
+        <div class="row">
+          <select id="teacherCollegeFilter" class="global-only filter-select" style="display:none"></select>
+          <button class="btn" onclick="openAddTeacher()">+ Add Teacher</button>
+        </div>
       </div>
-      <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Login ID</th><th>Department</th><th>Status</th><th></th></tr></thead>
-        <tbody id="teacherRows"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Login ID</th><th class="global-only" style="display:none">College</th><th>Department</th><th>Status</th><th></th></tr></thead>
+          <tbody id="teacherRows"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- Students -->
     <section id="view-students" style="display:none">
       <div class="topbar">
         <h2 style="margin:0">All Students</h2>
-        <button class="btn" onclick="openAddStudent()">+ Add Student</button>
+        <div class="row">
+          <select id="studentCollegeFilter" class="global-only filter-select" style="display:none"></select>
+          <button class="btn" onclick="openAddStudent()">+ Add Student</button>
+        </div>
       </div>
-      <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Login ID</th><th>Roll No.</th><th>Domain</th><th>Teachers</th><th></th></tr></thead>
-        <tbody id="studentRows"></tbody>
-      </table>
+      <input id="studentSearch" class="search-input" placeholder="Search by name, roll no., email or login ID…" />
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Login ID</th><th>Roll No.</th><th class="global-only" style="display:none">College</th><th>Domain</th><th>Teachers</th><th>Status</th><th></th></tr></thead>
+          <tbody id="studentRows"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- Restore data -->
     <section id="view-restore" style="display:none">
       <h2>♻️ Restore Data</h2>
-      <p style="color:var(--muted);font-size:14px;margin-top:-6px">
-        Bring back classes, quizzes (with their results and proctoring alerts) and proctoring images
-        that were deleted by a teacher or by the admin.
-      </p>
+      <p style="color:var(--muted);font-size:14px;margin-top:-6px" id="restoreIntro"></p>
       <div class="panel">
+        <div class="global-only" style="display:none">
+          <label style="margin-top:0">College</label>
+          <select id="rCollege"></select>
+        </div>
         <label>Restore data of</label>
         <div class="radio-group">
           <label class="check-item"><input type="radio" name="rScope" value="all" checked /> All teachers</label>
           <label class="check-item"><input type="radio" name="rScope" value="selected" /> Selected teacher(s)</label>
-          <label class="check-item"><input type="radio" name="rScope" value="admin" /> <span>Admin's removals <small>(students and teachers removed by the admin)</small></span></label>
+          <label class="check-item"><input type="radio" name="rScope" value="admin" /> <span>Admin's removals <small id="rAdminHint"></small></span></label>
         </div>
         <div id="rTeacherBox" style="display:none">
           <div class="check-list scroll" id="rTeacherList"></div>
@@ -95,11 +120,12 @@
     <!-- Delete data -->
     <section id="view-delete" style="display:none">
       <h2>🗑 Delete Data</h2>
-      <p style="color:var(--muted);font-size:14px;margin-top:-6px">
-        Delete teachers' data by time range. Deleted data goes to the recycle bin, so you can bring it back
-        from <b>Restore Data</b> (unless you tick permanent delete). Teacher and student accounts are never deleted here.
-      </p>
+      <p style="color:var(--muted);font-size:14px;margin-top:-6px" id="deleteIntro"></p>
       <div class="panel">
+        <div class="global-only" style="display:none">
+          <label style="margin-top:0">College</label>
+          <select id="dCollege"></select>
+        </div>
         <label>Delete data of</label>
         <div class="radio-group">
           <label class="check-item"><input type="radio" name="dScope" value="all" checked /> All teachers</label>
@@ -116,7 +142,7 @@
           <label class="check-item"><input type="checkbox" id="dCatQuizzes" checked /> Quizzes <small>(with results, proctoring alerts and images)</small></label>
           <label class="check-item"><input type="checkbox" id="dCatImages" checked /> Proctoring images only <small>(the alerts stay in the reports)</small></label>
         </div>
-        <label class="check-item" style="margin-top:14px;color:var(--danger)"><input type="checkbox" id="dPermanent" /> Delete permanently — cannot be restored</label>
+        <label class="check-item global-only" style="margin-top:14px;color:var(--danger);display:none"><input type="checkbox" id="dPermanent" /> Delete permanently — cannot be restored</label>
         <div class="row" style="margin-top:16px">
           <button class="btn secondary" onclick="previewDelete()">Preview what will be deleted</button>
         </div>
@@ -127,10 +153,87 @@
   </div>
 </div>
 
+<!-- Add college (global admin) -->
+<div class="modal-backdrop" id="addCollegeModal" style="display:none">
+  <div class="modal">
+    <h3>Add College</h3>
+    <form id="addCollegeForm">
+      <label>College name</label>
+      <input id="cName" placeholder="e.g. Jaypee Institute of Information Technology" required />
+      <label>Short name <small>(used for roll numbers, e.g. JIIT → JIIT1, JIIT2 …)</small></label>
+      <input id="cShort" placeholder="e.g. JIIT" maxlength="10" required style="text-transform:uppercase" />
+      <p class="hint" id="cShortHint" style="margin:6px 0 0"></p>
+      <h4 style="margin:18px 0 0">College admin</h4>
+      <label>Admin name</label>
+      <input id="cAdminName" required />
+      <label>Admin email</label>
+      <input id="cAdminEmail" type="email" required />
+      <p class="hint">A login ID and temporary password are generated for the college admin. They sign in from the normal <b>Admin</b> tab and will be asked to set their own password.</p>
+      <div class="row" style="margin-top:16px">
+        <button class="btn" type="submit">Create college</button>
+        <button class="btn secondary" type="button" onclick="closeModal('addCollegeModal')">Cancel</button>
+      </div>
+      <div class="error-msg" id="addCollegeError"></div>
+    </form>
+    <div id="collegeCredsResult"></div>
+  </div>
+</div>
+
+<!-- Edit college (global admin) -->
+<div class="modal-backdrop" id="editCollegeModal" style="display:none">
+  <div class="modal">
+    <h3>Edit College</h3>
+    <form id="editCollegeForm">
+      <label>College name</label>
+      <input id="eName" required />
+      <label>Short name</label>
+      <input id="eShort" maxlength="10" required style="text-transform:uppercase" />
+      <p class="hint" style="margin:6px 0 0">Changing the short name also changes every student's roll number in this college (e.g. JIIT7 → JIITN7).</p>
+      <div id="eAdminBox">
+        <h4 style="margin:18px 0 0">College admin</h4>
+        <label>Admin name</label>
+        <input id="eAdminName" />
+        <label>Admin email</label>
+        <input id="eAdminEmail" type="email" />
+      </div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn" type="submit">Save changes</button>
+        <button class="btn secondary" type="button" onclick="closeModal('editCollegeModal')">Cancel</button>
+      </div>
+      <div class="error-msg" id="editCollegeError"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Create a missing college admin (global admin) -->
+<div class="modal-backdrop" id="collegeAdminModal" style="display:none">
+  <div class="modal">
+    <h3>Create college admin</h3>
+    <p id="caCollegeName" style="color:var(--muted);font-size:13px;margin-top:0"></p>
+    <form id="collegeAdminForm">
+      <label>Admin name</label>
+      <input id="caName" required />
+      <label>Admin email</label>
+      <input id="caEmail" type="email" required />
+      <div class="row" style="margin-top:16px">
+        <button class="btn" type="submit">Create admin account</button>
+        <button class="btn secondary" type="button" onclick="closeModal('collegeAdminModal')">Cancel</button>
+      </div>
+      <div class="error-msg" id="collegeAdminError"></div>
+    </form>
+    <div id="caCredsResult"></div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="addTeacherModal" style="display:none">
   <div class="modal">
     <h3>Add Teacher</h3>
     <form id="addTeacherForm">
+      <div class="global-only" style="display:none">
+        <label>College</label>
+        <select id="tCollege"></select>
+      </div>
+      <p class="hint college-only" id="tCollegeNote" style="display:none"></p>
       <label>Full name</label>
       <input id="tName" required />
       <label>Email</label>
@@ -144,7 +247,7 @@
       </div>
       <div class="row" style="margin-top:16px">
         <button class="btn" type="submit">Create teacher account</button>
-        <button class="btn secondary" type="button" onclick="closeAddTeacher()">Cancel</button>
+        <button class="btn secondary" type="button" onclick="closeModal('addTeacherModal')">Cancel</button>
       </div>
       <div class="error-msg" id="addTeacherError"></div>
     </form>
@@ -156,6 +259,11 @@
   <div class="modal">
     <h3>Add Student</h3>
     <form id="addStudentForm">
+      <div class="global-only" style="display:none">
+        <label>College</label>
+        <select id="sCollege"></select>
+      </div>
+      <p class="hint college-only" id="sCollegeNote" style="display:none"></p>
       <label>Full name</label>
       <input id="sName" required />
       <label>Email</label>
@@ -168,13 +276,14 @@
         <option value="ECE">ECE</option>
         <option value="CIVIL">CIVIL</option>
       </select>
-      <p style="color:var(--muted);font-size:12px;margin:8px 0 0">Roll number is generated automatically.</p>
+      <p style="color:var(--muted);font-size:12px;margin:8px 0 0" id="sRollHint">Roll number is generated automatically.</p>
 
       <label>Add this student to</label>
       <div class="radio-group">
         <label class="check-item"><input type="radio" name="sMode" value="selected" checked /> Selected teachers</label>
         <label class="check-item"><input type="radio" name="sMode" value="domain" /> <span>All teachers of the student's domain <small id="sDomainHint"></small></span></label>
-        <label class="check-item"><input type="radio" name="sMode" value="all" /> All teachers (any department)</label>
+        <label class="check-item"><input type="radio" name="sMode" value="all" /> All teachers of the college (any department)</label>
+        <label class="check-item"><input type="radio" name="sMode" value="none" /> <span>No teacher for now <small>(teachers can pick this student later)</small></span></label>
       </div>
       <div id="sTeacherPicker">
         <label>Choose teachers</label>
@@ -183,7 +292,7 @@
 
       <div class="row" style="margin-top:16px">
         <button class="btn" type="submit">Create student account</button>
-        <button class="btn secondary" type="button" onclick="closeAddStudent()">Cancel</button>
+        <button class="btn secondary" type="button" onclick="closeModal('addStudentModal')">Cancel</button>
       </div>
       <div class="error-msg" id="addStudentError"></div>
     </form>

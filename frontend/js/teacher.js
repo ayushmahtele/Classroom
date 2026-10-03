@@ -1,5 +1,8 @@
 const me = Session.requireRole('teacher');
 document.getElementById('whoBox').textContent = `${me.name} (${me.loginId})`;
+api('/teacher/me').then((p) => {
+  if (p.collegeName) document.getElementById('whoCollege').textContent = `${p.collegeName}${p.collegeShort ? ` (${p.collegeShort})` : ''}`;
+}).catch(() => {});
 
 let classesCache = [];
 let studentsCache = [];
@@ -106,6 +109,7 @@ async function loadStudents() {
       <td>${escapeHtml(s.department || '-')}</td>
       <td>${escapeHtml((s.classIds || []).map(className).filter(Boolean).join(', ') || '-')}</td>
       <td>
+        ${s.status === 'suspended' ? '<span class="badge danger">suspended</span>' : ''}
         ${s.resetRequested ? '<span class="badge warn">Reset requested</span>' : ''}
         <button class="btn ghost" onclick="openStudentClasses('${s.id}')">Add to class</button>
         <button class="btn ghost" onclick="resetStudentPw('${s.id}')">Reset password</button>
@@ -141,23 +145,98 @@ function classCheckboxes(containerId) {
   `).join('') || '<span style="color:var(--muted);font-size:13px">You have no classes yet — create one in the Classes tab.</span>';
 }
 
+// ---- Add Student: pick students already in my college, or enter a new one ----
+// The college (and the roll number, e.g. JIIT12) are filled in automatically.
+let addMode = 'pick';
+let pickCache = [];           // students of my college that are not mine yet
+const pickSelected = new Set(); // ids ticked in the pick list (kept while searching)
+let myCollege = { name: '', short: '' };
+
 async function openAddStudent() {
   document.getElementById('addStudentForm').reset();
   document.getElementById('modalAddStudent').style.display = 'flex';
   document.getElementById('addStudentForm').style.display = 'block';
   document.getElementById('studentCredsResult').innerHTML = '';
   document.getElementById('addStudentError').textContent = '';
-  const [profile, classes] = await Promise.all([api('/teacher/me'), api('/teacher/classes')]);
+  pickSelected.clear();
+  document.getElementById('sPickList').innerHTML = '<p style="color:var(--muted);font-size:13px;padding:8px 10px;margin:0">Loading…</p>';
+  const [profile, classes, pool] = await Promise.all([api('/teacher/me'), api('/teacher/classes'), api('/teacher/college-students')]);
   myDepartments = profile.departments || [];
+  myCollege = { name: profile.collegeName || '', short: profile.collegeShort || '' };
   classesCache = classes;
-  // A teacher can only put a student in one of their own domains
+  pickCache = pool;
+  document.getElementById('sCollegeNote').innerHTML = myCollege.name
+    ? `College: <b>${escapeHtml(myCollege.name)}</b> — added automatically.`
+    : '';
+  // A teacher can only put a new student in one of their own domains
   // (an old account with no domain set can pick any).
   const options = myDepartments.length ? myDepartments : ['CSE', 'IT', 'ECE', 'CIVIL'];
   document.getElementById('sDept').innerHTML = options.map((d) => `<option value="${d}">${d}</option>`).join('');
   document.getElementById('sMyDomains').textContent = myDepartments.length ? `(${myDepartments.join(', ')})` : '(no domain set on your account)';
+  document.getElementById('sRollHint').textContent = myCollege.short
+    ? `Roll number is generated automatically (${myCollege.short}1, ${myCollege.short}2 …).`
+    : 'Roll number is generated automatically.';
   classCheckboxes('sClassList');
   refreshStudentClassUi();
+  // open on "select existing" when there is someone to pick, otherwise on "new"
+  setAddMode(pickCache.length ? 'pick' : 'new');
+  renderPickList();
 }
+
+function setAddMode(mode) {
+  addMode = mode;
+  document.querySelectorAll('#sModeTabs button').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+  document.getElementById('sPickBox').style.display = mode === 'pick' ? 'block' : 'none';
+  document.getElementById('sNewBox').style.display = mode === 'new' ? 'block' : 'none';
+  // only the visible fields are required
+  document.getElementById('sName').required = mode === 'new';
+  document.getElementById('sEmail').required = mode === 'new';
+  document.getElementById('addStudentError').textContent = '';
+  updateSubmitLabel();
+  if (mode === 'pick') setTimeout(() => document.getElementById('sPickSearch').focus(), 0);
+}
+document.querySelectorAll('#sModeTabs button').forEach((b) => b.addEventListener('click', () => setAddMode(b.dataset.mode)));
+
+function updateSubmitLabel() {
+  const btn = document.getElementById('sSubmitBtn');
+  if (addMode === 'new') { btn.textContent = 'Create student account'; return; }
+  const n = pickSelected.size;
+  btn.textContent = n ? `Add ${n} selected student${n === 1 ? '' : 's'}` : 'Add selected student(s)';
+}
+
+function renderPickList() {
+  const q = document.getElementById('sPickSearch').value.trim().toLowerCase();
+  const list = !q ? pickCache : pickCache.filter((s) =>
+    String(s.name).toLowerCase().includes(q) || String(s.rollNumber).toLowerCase().includes(q));
+  const box = document.getElementById('sPickList');
+  if (!pickCache.length) {
+    box.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:8px 10px;margin:0">There are no other students in your college yet. Use <b>Enter new student details</b> to create one.</p>';
+  } else if (!list.length) {
+    box.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:8px 10px;margin:0">No student matches your search.</p>';
+  } else {
+    box.innerHTML = list.map((s) => `
+      <label class="pick-row">
+        <input type="checkbox" value="${s.id}" ${pickSelected.has(s.id) ? 'checked' : ''} />
+        <div class="pick-main">
+          <div><b>${escapeHtml(s.name)}</b> &nbsp;<code>${escapeHtml(s.rollNumber || '-')}</code>${s.status === 'suspended' ? ' <span class="badge danger">suspended</span>' : ''}</div>
+          <div class="pick-sub">${escapeHtml(s.email)} · ${escapeHtml(s.department || 'no domain')} · added by ${escapeHtml(s.addedBy)}</div>
+        </div>
+      </label>`).join('');
+    box.querySelectorAll('input[type=checkbox]').forEach((cb) => cb.addEventListener('change', () => {
+      if (cb.checked) pickSelected.add(cb.value); else pickSelected.delete(cb.value);
+      updatePickCount();
+    }));
+  }
+  updatePickCount(list.length);
+}
+
+function updatePickCount(shown) {
+  const total = pickCache.length;
+  const showing = shown === undefined ? '' : `Showing ${shown} of ${total} student(s) of your college that you don't have yet.`;
+  document.getElementById('sPickCount').textContent = `${showing}${pickSelected.size ? ` ${pickSelected.size} selected.` : ''}`.trim();
+  updateSubmitLabel();
+}
+document.getElementById('sPickSearch').addEventListener('input', renderPickList);
 
 function refreshStudentClassUi() {
   const mode = document.querySelector('input[name="sClassMode"]:checked').value;
@@ -173,11 +252,24 @@ document.getElementById('addStudentForm').addEventListener('submit', async (e) =
   const classIds = [...document.querySelectorAll('#sClassList input:checked')].map((c) => c.value);
   if (classMode === 'selected' && !classIds.length) { err.textContent = 'Select at least one class.'; return; }
   if (classMode === 'all' && !classesCache.length) { err.textContent = 'You have no classes yet.'; return; }
+  const assignMode = document.querySelector('input[name="sAssign"]:checked').value;
+
+  if (addMode === 'pick') {
+    if (!pickSelected.size) { err.textContent = 'Select at least one student (use the search box to find them).'; return; }
+    try {
+      const r = await api('/teacher/students/link', { method: 'POST', body: { studentIds: [...pickSelected], assignMode, classMode, classIds } });
+      closeModal('modalAddStudent');
+      toast(`Added ${r.studentsAdded} student(s)${r.classesJoined ? ` · ${r.classesJoined} class membership(s)` : ''}`);
+      loadStudents();
+    } catch (e2) { err.textContent = e2.message; }
+    return;
+  }
+
   const body = {
     name: document.getElementById('sName').value.trim(),
     email: document.getElementById('sEmail').value.trim(),
     department: document.getElementById('sDept').value,
-    assignMode: document.querySelector('input[name="sAssign"]:checked').value,
+    assignMode,
     classMode,
     classIds
   };
@@ -190,7 +282,8 @@ document.getElementById('addStudentForm').addEventListener('submit', async (e) =
         Login ID: ${escapeHtml(data.credentials.loginId)}<br/>
         Temporary password: ${escapeHtml(data.credentials.temporaryPassword)}<br/>
         Email: ${escapeHtml(data.credentials.email)}<br/>
-        Roll number: ${escapeHtml(data.student.rollNumber)} &nbsp;•&nbsp; Domain: ${escapeHtml(data.student.department)}
+        Roll number: ${escapeHtml(data.student.rollNumber)} &nbsp;•&nbsp; Domain: ${escapeHtml(data.student.department)}<br/>
+        College: ${escapeHtml(data.student.collegeName)}
       </div>
       <p style="font-size:13px;color:var(--muted)">Added to ${data.teachersAssigned} teacher(s) and ${data.classesJoined} of your class(es).</p>
       <button class="btn full" style="margin-top:14px" onclick="closeModal('modalAddStudent'); loadStudents();">Done</button>

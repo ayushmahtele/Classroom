@@ -12,6 +12,7 @@ const { Server } = require('socket.io');
 
 const db = require('./db');
 const { id } = require('./utils/helpers');
+const { migrateToColleges } = require('./utils/college');
 
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
@@ -27,8 +28,10 @@ app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '2mb' }));
 
 // ---- Bootstrap the very first admin account (idempotent) -----------------
+// This is the GLOBAL (platform) admin: an admin account with no collegeId.
+// College admins are created by the global admin from Admin -> Colleges.
 async function bootstrapAdmin() {
-  const already = db.users.findOne((u) => u.role === 'admin');
+  const already = db.users.findOne((u) => u.role === 'admin' && !u.collegeId);
   if (already) return;
   const passwordHash = await bcrypt.hash(process.env.BOOTSTRAP_ADMIN_PASSWORD || 'ChangeMe@123', 10);
   await db.users.insert({
@@ -77,6 +80,9 @@ io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('No auth token'));
     socket.user = jwt.verify(token, process.env.JWT_SECRET);
+    const u = db.users.findById(socket.user.id);
+    if (!u) return next(new Error('Account not found'));
+    socket.user.collegeId = u.collegeId || null;
     next();
   } catch (e) {
     next(new Error('Invalid token'));
@@ -86,7 +92,8 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   // Teachers/admins subscribe to a quiz's live room to watch alerts stream in
   socket.on('watch-quiz', (quizId) => {
-    if (['teacher', 'admin'].includes(socket.user.role)) {
+    // only the quiz's own teacher, its college admin, or the global admin
+    if (['teacher', 'admin'].includes(socket.user.role) && proctorRoutes.canViewQuiz(socket.user, db.quizzes.findById(quizId))) {
       socket.join(`quiz:${quizId}`);
     }
   });
@@ -101,6 +108,7 @@ const PORT = process.env.PORT || 5000;
 async function start() {
   await db.connect();
   await bootstrapAdmin();
+  await migrateToColleges(); // one-time: puts pre-existing teachers/students into a college
   server.listen(PORT, () => {
     console.log(`Proctored Quiz API + frontend running on http://localhost:${PORT}`);
   });

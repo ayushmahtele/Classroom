@@ -1,5 +1,8 @@
 const me = Session.requireRole('student');
 document.getElementById('whoBox').textContent = `${me.name} (${me.loginId})`;
+api('/student/profile').then((p) => {
+  if (p.collegeName) document.getElementById('whoCollege').textContent = `${p.collegeName}${p.collegeShort ? ` (${p.collegeShort})` : ''}`;
+}).catch(() => {});
 
 document.querySelectorAll('.nav-btn[data-view]').forEach((btn) => {
   btn.addEventListener('click', () => {

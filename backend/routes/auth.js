@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, blockedReason } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -22,19 +22,20 @@ router.post('/login', async (req, res) => {
   );
 
   if (!user) return res.status(401).json({ error: 'Account not found' });
-  if (user.status === 'suspended') {
-    return res.status(403).json({ error: 'This account has been suspended. Contact your admin.' });
-  }
-
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return res.status(401).json({ error: 'Incorrect password' });
+
+  // Suspended account, or its whole college suspended by the platform admin
+  const blocked = blockedReason(user);
+  if (blocked) return res.status(403).json({ error: blocked });
 
   const payload = {
     id: user.id,
     role: user.role,
     name: user.name,
     loginId: user.loginId,
-    email: user.email
+    email: user.email,
+    collegeId: user.collegeId || null // null = global (platform) admin
   };
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '12h'
@@ -51,7 +52,8 @@ router.get('/me', authRequired, (req, res) => {
   const user = db.users.findById(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   const { passwordHash, ...safe } = user;
-  res.json(safe);
+  const college = user.collegeId ? db.colleges.findById(user.collegeId) : null;
+  res.json({ ...safe, college: college ? { id: college.id, name: college.name, shortName: college.shortName } : null });
 });
 
 router.post('/change-password', authRequired, async (req, res) => {
@@ -75,9 +77,11 @@ router.post('/change-password', authRequired, async (req, res) => {
 // ---- Forgot password ------------------------------------------------------
 // There is no email service, so "forgot password" raises a reset request:
 // the student's teacher / the admin sees it and issues a new temporary password.
-// Teachers' requests go to the admin. (Admin accounts can't be reset this way.)
+// Teachers' requests go to their college admin (and the global admin); college
+// admins' requests go to the global admin. (The global admin can't be reset this way.)
+const isGlobalAdmin = (u) => u.role === 'admin' && !u.collegeId;
 async function flagResetRequest(user) {
-  if (!user || user.role === 'admin') return false;
+  if (!user || isGlobalAdmin(user)) return false;
   await db.users.update(user.id, { resetRequested: new Date().toISOString() });
   return true;
 }
@@ -86,7 +90,7 @@ async function flagResetRequest(user) {
 router.post('/request-reset', authRequired, async (req, res) => {
   const user = db.users.findById(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  if (user.role === 'admin') return res.status(400).json({ error: 'Admin passwords cannot be reset this way.' });
+  if (isGlobalAdmin(user)) return res.status(400).json({ error: 'The platform admin password cannot be reset this way.' });
   await flagResetRequest(user);
   res.json({ ok: true });
 });

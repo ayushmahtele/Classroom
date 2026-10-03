@@ -3,14 +3,21 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authRequired, requireRole } = require('../middleware/auth');
 const recycle = require('../utils/recycle');
-const { id, tempPassword, readableId, DEPARTMENTS, teacherDepartments, nextRollNumber, studentVisibleTo } = require('../utils/helpers');
+const { id, tempPassword, uniqueLoginId, DEPARTMENTS, teacherDepartments, studentVisibleTo } = require('../utils/helpers');
+const { assignRollNumber } = require('../utils/college');
 
 const router = express.Router();
 router.use(authRequired, requireRole('teacher'));
 
+// A teacher only ever works inside their own college.
+const sameCollege = (req, user) => !!user && user.collegeId === req.user.collegeId;
+const isMyStudent = (req, student) =>
+  !!student && student.role === 'student' && sameCollege(req, student) && studentVisibleTo(student, req.user.id);
+
 // ---- Profile ------------------------------------------------------------
 router.get('/me', (req, res) => {
   const me = db.users.findById(req.user.id);
+  const college = me.collegeId ? db.colleges.findById(me.collegeId) : null;
   const classes = db.classes
     .find((c) => c.teacherId === me.id)
     .map((c) => ({ id: c.id, name: c.name, studentCount: c.studentIds.length }));
@@ -20,6 +27,8 @@ router.get('/me', (req, res) => {
     name: me.name,
     email: me.email,
     departments: teacherDepartments(me),
+    collegeName: college?.name || '',
+    collegeShort: college?.shortName || '',
     totalClasses: classes.length,
     classes
   });
@@ -52,37 +61,52 @@ function pickClasses(teacherId, mode, classIds) {
   return { ids };
 }
 
-// Teacher creates a student and chooses who else gets them:
+// Which teachers (all of this teacher's college) a student is shared with:
 //   assignMode 'me'     -> only this teacher
-//   assignMode 'domain' -> all teachers who share this teacher's department(s)
-//   assignMode 'all'    -> every teacher, whatever their department
+//   assignMode 'domain' -> all teachers of the college who share this teacher's department(s)
+//   assignMode 'all'    -> every teacher of the college, whatever their department
+function resolveAssignTeachers(self, assignMode) {
+  const collegeTeachers = db.users.find((u) => u.role === 'teacher' && u.collegeId === self.collegeId);
+  if (assignMode === 'domain') {
+    const myDepts = teacherDepartments(self);
+    if (!myDepts.length) return { error: 'Your account has no department set. Ask your admin to add one.' };
+    return { ids: collegeTeachers.filter((u) => u.id === self.id || teacherDepartments(u).some((d) => myDepts.includes(d))).map((u) => u.id) };
+  }
+  if (assignMode === 'all') return { ids: collegeTeachers.map((u) => u.id) };
+  return { ids: [self.id] };
+}
+
+function checkOptions(assignMode, classMode) {
+  if (!['me', 'domain', 'all'].includes(assignMode)) return 'Invalid teacher option';
+  if (!['none', 'selected', 'all'].includes(classMode)) return 'Invalid class option';
+  return null;
+}
+
+// Teacher creates a brand-new student (name, email, domain). The student is put in
+// the teacher's college automatically and gets the next roll number of that
+// college (e.g. JIIT12). Who else gets the student: see resolveAssignTeachers.
 // Optionally also puts the student in this teacher's class(es):
 //   classMode 'none' | 'selected' (classIds) | 'all'
 router.post('/students', async (req, res) => {
   const { name, email, department, assignMode = 'me', classMode = 'none', classIds } = req.body || {};
   if (!name || !email) return res.status(400).json({ error: 'name and email are required' });
-  if (!['me', 'domain', 'all'].includes(assignMode)) return res.status(400).json({ error: 'Invalid teacher option' });
-  if (!['none', 'selected', 'all'].includes(classMode)) return res.status(400).json({ error: 'Invalid class option' });
+  const bad = checkOptions(assignMode, classMode);
+  if (bad) return res.status(400).json({ error: bad });
 
   const exists = db.users.findOne((u) => u.email?.toLowerCase() === email.toLowerCase());
   if (exists) return res.status(409).json({ error: 'A user with this email already exists' });
 
   const self = db.users.findById(req.user.id);
+  const college = self.collegeId ? db.colleges.findById(self.collegeId) : null;
+  if (!college) return res.status(400).json({ error: 'Your account is not linked to a college. Ask your admin.' });
   const myDepts = teacherDepartments(self);
   const domain = String(department || '').trim().toUpperCase();
   if (!DEPARTMENTS.includes(domain) || (myDepts.length && !myDepts.includes(domain))) {
     return res.status(400).json({ error: `Choose the student's domain${myDepts.length ? ` (${myDepts.join(', ')})` : ''}` });
   }
 
-  let teacherIds = [self.id];
-  if (assignMode === 'domain') {
-    if (!myDepts.length) return res.status(400).json({ error: 'Your account has no department set. Ask the admin to add one.' });
-    teacherIds = db.users
-      .find((u) => u.role === 'teacher' && (u.id === self.id || teacherDepartments(u).some((d) => myDepts.includes(d))))
-      .map((u) => u.id);
-  } else if (assignMode === 'all') {
-    teacherIds = db.users.find((u) => u.role === 'teacher').map((u) => u.id);
-  }
+  const assigned = resolveAssignTeachers(self, assignMode);
+  if (assigned.error) return res.status(400).json({ error: assigned.error });
 
   let classesToJoin = [];
   if (classMode !== 'none') {
@@ -91,9 +115,10 @@ router.post('/students', async (req, res) => {
     classesToJoin = picked.ids;
   }
 
-  const loginId = readableId('STU');
+  const loginId = uniqueLoginId('STU', db.users.all());
   const plainPassword = tempPassword();
   const passwordHash = await bcrypt.hash(plainPassword, 10);
+  const roll = await assignRollNumber(college.id); // auto-generated, per college
 
   const student = {
     id: id(),
@@ -101,12 +126,14 @@ router.post('/students', async (req, res) => {
     name,
     email,
     department: domain,
-    rollNumber: nextRollNumber(db.users.all()), // auto-generated
+    rollNumber: roll.rollNumber,
+    rollSeq: roll.rollSeq,
     loginId,
     passwordHash,
     mustChangePassword: true,
     status: 'active',
-    teacherIds,
+    collegeId: college.id,
+    teacherIds: assigned.ids,
     createdBy: req.user.id,
     createdAt: new Date().toISOString()
   };
@@ -116,17 +143,75 @@ router.post('/students', async (req, res) => {
   res.status(201).json({
     message: 'Student created. Share these credentials with them securely.',
     credentials: { loginId, temporaryPassword: plainPassword, email },
-    student: { id: student.id, name, email, loginId, department: domain, rollNumber: student.rollNumber },
-    teachersAssigned: teacherIds.length,
+    student: { id: student.id, name, email, loginId, department: domain, rollNumber: student.rollNumber, collegeName: college.name },
+    teachersAssigned: assigned.ids.length,
     classesJoined: enrolled
   });
+});
+
+// Students of my college that are NOT mine yet (added by the college admin, the
+// global admin or another teacher) — the teacher can pick them in "Add Student".
+router.get('/college-students', (req, res) => {
+  const creators = Object.fromEntries(db.users.all().map((u) => [u.id, u]));
+  const addedBy = (s) => {
+    const c = creators[s.createdBy];
+    if (!c) return 'Admin';
+    if (c.role === 'admin') return c.collegeId ? 'College admin' : 'Global admin';
+    return c.id === req.user.id ? 'You' : `Teacher ${c.name}`;
+  };
+  const list = db.users
+    .find((u) => u.role === 'student' && sameCollege(req, u) && !studentVisibleTo(u, req.user.id))
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      email: s.email,
+      loginId: s.loginId,
+      rollNumber: s.rollNumber || '',
+      rollSeq: s.rollSeq || 0,
+      department: s.department || '',
+      status: s.status || 'active',
+      addedBy: addedBy(s)
+    }))
+    .sort((a, b) => a.rollSeq - b.rollSeq);
+  res.json(list);
+});
+
+// Adds one or more existing students of my college to me (and, depending on
+// assignMode, to other teachers of my college) and optionally to my class(es).
+router.post('/students/link', async (req, res) => {
+  const { studentIds, assignMode = 'me', classMode = 'none', classIds } = req.body || {};
+  const bad = checkOptions(assignMode, classMode);
+  if (bad) return res.status(400).json({ error: bad });
+  const wanted = Array.isArray(studentIds) ? [...new Set(studentIds)] : [];
+  const students = wanted.map((sid) => db.users.findById(sid)).filter((s) => s && s.role === 'student' && sameCollege(req, s));
+  if (!students.length) return res.status(400).json({ error: 'Select at least one student' });
+
+  const self = db.users.findById(req.user.id);
+  const assigned = resolveAssignTeachers(self, assignMode);
+  if (assigned.error) return res.status(400).json({ error: assigned.error });
+
+  let classesToJoin = [];
+  if (classMode !== 'none') {
+    const picked = pickClasses(self.id, classMode, classIds);
+    if (picked.error) return res.status(400).json({ error: picked.error });
+    classesToJoin = picked.ids;
+  }
+
+  let classesJoined = 0;
+  for (const st of students) {
+    const current = Array.isArray(st.teacherIds) ? st.teacherIds : (st.createdBy ? [st.createdBy] : []);
+    const next = [...new Set([...current, ...assigned.ids])];
+    if (next.length !== current.length || !Array.isArray(st.teacherIds)) await db.users.update(st.id, { teacherIds: next });
+    classesJoined += await enrollStudentInClasses(self.id, st.id, classesToJoin);
+  }
+  res.json({ ok: true, studentsAdded: students.length, teachersAssigned: assigned.ids.length, classesJoined });
 });
 
 // Only the students that belong to this teacher.
 router.get('/students', (req, res) => {
   const myClasses = db.classes.find((c) => c.teacherId === req.user.id);
   const list = db.users
-    .find((u) => u.role === 'student' && studentVisibleTo(u, req.user.id))
+    .find((u) => isMyStudent(req, u))
     .map(({ passwordHash, ...s }) => ({
       ...s,
       classIds: myClasses.filter((c) => c.studentIds.includes(s.id)).map((c) => c.id)
@@ -137,7 +222,7 @@ router.get('/students', (req, res) => {
 // Teacher issues a new temporary password for one of their students
 router.post('/students/:id/reset-password', async (req, res) => {
   const student = db.users.findById(req.params.id);
-  if (!student || student.role !== 'student' || !studentVisibleTo(student, req.user.id)) {
+  if (!isMyStudent(req, student)) {
     return res.status(404).json({ error: 'Student not found' });
   }
   const plainPassword = tempPassword();
@@ -151,7 +236,7 @@ router.post('/students/:id/reset-password', async (req, res) => {
 // that student are removed. Restorable by the admin from the recycle bin.
 router.delete('/students/:id', async (req, res) => {
   const student = db.users.findById(req.params.id);
-  if (!student || student.role !== 'student' || !studentVisibleTo(student, req.user.id)) {
+  if (!isMyStudent(req, student)) {
     return res.status(404).json({ error: 'Student not found' });
   }
   const teacher = db.users.findById(req.user.id);
@@ -162,7 +247,7 @@ router.delete('/students/:id', async (req, res) => {
 // Add an existing student to one, several or all of this teacher's classes.
 router.post('/students/:id/classes', async (req, res) => {
   const student = db.users.findById(req.params.id);
-  if (!student || student.role !== 'student' || !studentVisibleTo(student, req.user.id)) {
+  if (!isMyStudent(req, student)) {
     return res.status(404).json({ error: 'Student not found' });
   }
   const { mode = 'selected', classIds } = req.body || {};
@@ -200,7 +285,7 @@ router.post('/classes/:id/enroll', async (req, res) => {
   if (!cls || cls.teacherId !== req.user.id) return res.status(404).json({ error: 'Class not found' });
   const { studentId } = req.body || {};
   const student = db.users.findById(studentId);
-  if (!student || student.role !== 'student' || !studentVisibleTo(student, req.user.id)) return res.status(404).json({ error: 'Student not found' });
+  if (!isMyStudent(req, student)) return res.status(404).json({ error: 'Student not found' });
   if (!cls.studentIds.includes(studentId)) cls.studentIds.push(studentId);
   await db.classes.update(cls.id, { studentIds: cls.studentIds });
   res.json(cls);
@@ -343,7 +428,8 @@ router.post('/attendance', async (req, res) => {
   const cls = db.classes.findById(classId);
   if (!cls || cls.teacherId !== req.user.id) return res.status(404).json({ error: 'Class not found' });
   const created = [];
-  for (const r of records || []) {
+  // only students who are actually in this class
+  for (const r of (records || []).filter((x) => cls.studentIds.includes(x.studentId))) {
     const entry = { id: id(), classId, studentId: r.studentId, date, status: r.status, markedBy: req.user.id };
     await db.attendance.insert(entry);
     created.push(entry);

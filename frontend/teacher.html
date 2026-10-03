@@ -25,6 +25,7 @@
       <button class="nav-btn" data-view="profile">👤 My Profile</button>
     </nav>
     <div style="margin-top:30px" class="who" id="whoBox"></div>
+    <div class="who-college" id="whoCollege"></div>
     <button class="nav-btn logout" onclick="logout()">🚪 Log out</button>
   </div>
 
@@ -125,20 +126,36 @@
 </div>
 
 <div class="modal-backdrop" id="modalAddStudent" style="display:none">
-  <div class="modal">
+  <div class="modal" style="max-width:600px">
     <h3>Add Student</h3>
+    <p class="hint" id="sCollegeNote" style="margin-top:-6px"></p>
     <form id="addStudentForm">
-      <label>Full name</label><input id="sName" required />
-      <label>Email</label><input id="sEmail" type="email" required />
-      <label>Student domain</label>
-      <select id="sDept" required></select>
-      <p style="color:var(--muted);font-size:12px;margin:8px 0 0">Roll number is generated automatically.</p>
+      <div class="seg-tabs" id="sModeTabs">
+        <button type="button" data-mode="pick" class="active">Select existing student</button>
+        <button type="button" data-mode="new">Enter new student details</button>
+      </div>
+
+      <!-- Pick students already registered in my college -->
+      <div id="sPickBox">
+        <input id="sPickSearch" placeholder="Search by name or roll no. (e.g. ayush or JIIT12)" autocomplete="off" />
+        <div class="pick-list" id="sPickList" style="margin-top:8px"></div>
+        <p class="hint" id="sPickCount"></p>
+      </div>
+
+      <!-- Brand-new student -->
+      <div id="sNewBox" style="display:none">
+        <label>Full name</label><input id="sName" />
+        <label>Email</label><input id="sEmail" type="email" />
+        <label>Student domain</label>
+        <select id="sDept"></select>
+        <p style="color:var(--muted);font-size:12px;margin:8px 0 0" id="sRollHint">Roll number is generated automatically.</p>
+      </div>
 
       <label>Add this student to</label>
       <div class="radio-group">
         <label class="check-item"><input type="radio" name="sAssign" value="me" checked /> Only me</label>
         <label class="check-item"><input type="radio" name="sAssign" value="domain" /> <span>All teachers of my domain <small id="sMyDomains"></small></span></label>
-        <label class="check-item"><input type="radio" name="sAssign" value="all" /> All teachers (any department)</label>
+        <label class="check-item"><input type="radio" name="sAssign" value="all" /> <span>All teachers (any department) <small>— of my college</small></span></label>
       </div>
 
       <label>Also put the student in my class</label>
@@ -151,7 +168,7 @@
         <div class="check-list scroll" id="sClassList"></div>
       </div>
       <div class="row" style="margin-top:16px">
-        <button class="btn" type="submit">Create student account</button>
+        <button class="btn" type="submit" id="sSubmitBtn">Add selected student(s)</button>
         <button class="btn secondary" type="button" onclick="closeModal('modalAddStudent')">Cancel</button>
       </div>
       <div class="error-msg" id="addStudentError"></div>

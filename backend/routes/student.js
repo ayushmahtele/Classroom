@@ -25,6 +25,7 @@ function myClasses(studentId) {
 // ---- Profile --------------------------------------------------------------
 router.get('/profile', (req, res) => {
   const me = db.users.findById(req.user.id);
+  const college = me.collegeId ? db.colleges.findById(me.collegeId) : null;
   const classes = myClasses(me.id).map((c) => ({
     id: c.id,
     name: c.name,
@@ -37,6 +38,8 @@ router.get('/profile', (req, res) => {
     email: me.email,
     rollNumber: me.rollNumber || '',
     department: me.department || '',
+    collegeName: college?.name || '',
+    collegeShort: college?.shortName || '',
     totalClasses: classes.length,
     classes
   });

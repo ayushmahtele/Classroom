@@ -18,6 +18,20 @@ function readableId(prefix) {
   return `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
+/** A login ID (e.g. STU2048) that no other account already uses. Falls back to
+ *  5, then 6 digits if the 4-digit space for that prefix is getting crowded. */
+function uniqueLoginId(prefix, users) {
+  const taken = new Set(users.map((u) => String(u.loginId || '').toUpperCase()));
+  for (let digits = 4; digits <= 8; digits++) {
+    for (let i = 0; i < 40; i++) {
+      const min = 10 ** (digits - 1);
+      const candidate = `${prefix}${Math.floor(min + Math.random() * 9 * min)}`;
+      if (!taken.has(candidate.toUpperCase())) return candidate;
+    }
+  }
+  throw new Error('Could not generate a unique login ID');
+}
+
 // Departments (domains) a teacher can belong to and a student can be in.
 const DEPARTMENTS = ['CSE', 'IT', 'ECE', 'CIVIL'];
 
@@ -42,23 +56,6 @@ function cleanDepartments(input) {
   return out;
 }
 
-/** Auto-incrementing roll number (1, 2, 3 ...). Shared by admin and teacher
- *  student creation so numbers never collide. Handled synchronously so two
- *  simultaneous requests can never get the same number. */
-let rollCounter = null;
-function nextRollNumber(users) {
-  if (rollCounter === null) {
-    rollCounter = 0;
-    for (const u of users) {
-      if (u.role === 'student' && /^\d+$/.test(String(u.rollNumber || ''))) {
-        rollCounter = Math.max(rollCounter, Number(u.rollNumber));
-      }
-    }
-  }
-  rollCounter += 1;
-  return String(rollCounter);
-}
-
 /** Is this student one of the teacher's students? Students created before the
  *  teacherIds field existed fall back to "created by this teacher". */
 function studentVisibleTo(student, teacherId) {
@@ -66,4 +63,4 @@ function studentVisibleTo(student, teacherId) {
   return student.createdBy === teacherId;
 }
 
-module.exports = { id, tempPassword, readableId, DEPARTMENTS, teacherDepartments, cleanDepartments, nextRollNumber, studentVisibleTo };
+module.exports = { id, tempPassword, readableId, uniqueLoginId, DEPARTMENTS, teacherDepartments, cleanDepartments, studentVisibleTo };

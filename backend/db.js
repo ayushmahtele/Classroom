@@ -27,9 +27,10 @@ const { MongoClient } = require('mongodb');
 
 const EVIDENCE_DIR = path.join(__dirname, 'uploads', 'evidence');
 
-const COLLECTIONS = ['users', 'classes', 'quizzes', 'attempts', 'proctorEvents', 'attendance'];
+const COLLECTIONS = ['colleges', 'users', 'classes', 'quizzes', 'attempts', 'proctorEvents', 'attendance'];
 
 const cache = {
+  colleges: [],
   users: [],
   classes: [],
   quizzes: [],
@@ -79,6 +80,7 @@ async function connect() {
   await mongoDb.collection('evidenceTrash').createIndex({ filename: 1 }, { unique: true });
   await mongoDb.collection('trash').createIndex({ deletedAt: -1 });
   await mongoDb.collection('trash').createIndex({ teacherId: 1 });
+  await mongoDb.collection('trash').createIndex({ collegeId: 1 });
 
   console.log('Connected to MongoDB Atlas and loaded data into memory cache.');
 }
@@ -150,6 +152,11 @@ const trash = {
   },
   async remove(id) {
     await mongoDb.collection('trash').deleteOne({ id });
+  },
+  // used by the one-time multi-college migration
+  async updateMany(query, set) {
+    const r = await mongoDb.collection('trash').updateMany(query, { $set: set });
+    return r.modifiedCount;
   }
 };
 
@@ -211,6 +218,7 @@ module.exports = {
   restoreEvidence,
   deleteEvidence,
   trash,
+  colleges: makeCollection('colleges'),
   users: makeCollection('users'),
   classes: makeCollection('classes'),
   quizzes: makeCollection('quizzes'),

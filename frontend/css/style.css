@@ -225,3 +225,25 @@ tr:last-child td { border-bottom: none; }
 .login-logo img { width: 72px; height: 72px; border-radius: 50%; box-shadow: 0 6px 18px rgba(190, 14, 14, .35); }
 .login-card h1.login-title { text-align: center; font-size: 26px; margin: 6px 0 4px; }
 .login-card p.sub.center { text-align: center; }
+
+/* ---- Multi-college additions ---- */
+.sidebar .who-college { font-size: 12px; color: #8f96b8; margin-top: 4px; line-height: 1.35; }
+.table-wrap { width: 100%; overflow-x: auto; border-radius: var(--radius); }
+.table-wrap table { min-width: 720px; }
+td.actions { white-space: nowrap; }
+.filter-select { width: auto; min-width: 220px; }
+.search-input { margin: 0 0 14px; max-width: 420px; }
+.seg-tabs { display: flex; gap: 6px; margin: 4px 0 10px; }
+.seg-tabs button {
+  flex: 1; padding: 8px 0; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); cursor: pointer; font-size: 13px; color: var(--muted);
+}
+.seg-tabs button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.pick-list { max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.pick-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 14px; margin: 0; color: inherit; }
+.pick-row:last-child { border-bottom: none; }
+.pick-row:hover { background: #f7f8fd; }
+.pick-row input { width: auto; flex: 0 0 auto; margin: 0; }
+.pick-row .pick-main { flex: 1; min-width: 0; }
+.pick-row .pick-sub { font-size: 12px; color: var(--muted); }
+.pick-row code { font-size: 12px; }
