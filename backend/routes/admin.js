@@ -481,6 +481,9 @@ async function findTrash(req, { collegeId, scope, teacherIds, range }) {
   if (scope === 'admin') {
     // accounts / colleges removed by an admin
     query.kind = { $in: ADMIN_KINDS };
+  } else if (scope === 'college_admin') {
+    // EVERYTHING the college admin deleted: teachers, students, classes, quizzes, images
+    query.by = 'college_admin';
   } else if (scope === 'all') {
     // everything a teacher's data was involved in (incl. teachers removed since)
     query.teacherId = { $ne: null };
@@ -493,11 +496,16 @@ async function findTrash(req, { collegeId, scope, teacherIds, range }) {
   }
   if (r.cutoff) query.deletedAt = { $gte: r.cutoff.toISOString() };
 
-  // A college admin can't restore what the global admin deleted.
+  // A college admin can't restore what the global admin deleted, nor what they
+  // deleted "permanently" themselves (only the global admin can bring that back).
   let hiddenGlobal = 0;
   if (!req.isGlobal) {
-    hiddenGlobal = (await db.trash.list({ ...query, by: { $in: ['global', 'admin'] } })).length;
-    query.by = { $nin: ['global', 'admin'] };
+    const total = (await db.trash.list(query)).length;
+    if (!query.by) query.by = { $nin: ['global', 'admin'] };
+    query.hiddenFromCollege = { $ne: true };
+    const rows = await db.trash.list(query);
+    hiddenGlobal = total - rows.length;
+    return { rows, hiddenGlobal };
   }
   return { rows: await db.trash.list(query), hiddenGlobal };
 }
@@ -505,10 +513,11 @@ async function findTrash(req, { collegeId, scope, teacherIds, range }) {
 /** May this admin restore this recycle-bin record? */
 function canRestore(req, rec) {
   if (req.isGlobal) return true;
-  return rec.collegeId === req.collegeId && !recycle.isGlobalDeletion(rec.by);
+  return rec.collegeId === req.collegeId && !recycle.isGlobalDeletion(rec.by) && !rec.hiddenFromCollege;
 }
 
-const byLabel = (by) => (recycle.isGlobalDeletion(by) ? 'Global admin' : by === 'college_admin' ? 'College admin' : 'Teacher');
+const byLabel = (r) => (recycle.isGlobalDeletion(r.by) ? 'Global admin'
+  : r.by === 'college_admin' ? (r.hiddenFromCollege ? 'College admin (permanent)' : 'College admin') : 'Teacher');
 
 router.get('/trash', async (req, res) => {
   const { collegeId, scope, range } = req.query;
@@ -521,7 +530,7 @@ router.get('/trash', async (req, res) => {
     id: r.id, kind: r.kind, label: r.label, teacherId: r.teacherId,
     teacherName: names[r.teacherId] || r.teacherName || '—',
     collegeName: colleges[r.collegeId]?.name || (r.kind === 'admin_college' ? r.label : '—'),
-    deletedAt: r.deletedAt, by: r.by, byLabel: byLabel(r.by), counts: r.counts
+    deletedAt: r.deletedAt, by: r.by, byLabel: byLabel(r), counts: r.counts
   }));
   res.json({ items, totals: recycle.sumCounts(items.map((i) => i.counts)), hiddenGlobal: found.hiddenGlobal });
 });
@@ -539,7 +548,7 @@ router.post('/trash/restore', async (req, res) => {
   const skipped = [];
   rows = rows.filter((r) => {
     if (r && canRestore(req, r)) return true;
-    if (r) skipped.push({ label: r.label, reason: 'Deleted by the global admin — only they can restore it' });
+    if (r) skipped.push({ label: r.label, reason: 'Only the global admin can restore this' });
     return false;
   });
   // colleges and accounts first, then classes/quizzes, single images last (each needs the one before it)
@@ -556,12 +565,13 @@ router.post('/trash/restore', async (req, res) => {
 });
 
 // Delete data. `dryRun: true` only counts what would be deleted.
-// Everything goes to the recycle bin (restorable). Only the global admin may
-// use `permanent: true`; a college admin's deletions always stay restorable
-// (and the global admin can always still see/restore them).
+// Normally everything goes to the recycle bin (restorable).
+// `permanent: true`:
+//   - global admin  -> erased for good
+//   - college admin -> gone for the college admin (they can't see or restore it),
+//                      but still kept for the global admin, who can restore it
 router.post('/data/delete', async (req, res) => {
   const { collegeId, scope, teacherIds, range, categories, permanent, dryRun } = req.body || {};
-  if (permanent && !req.isGlobal) return res.status(403).json({ error: 'Only the global admin can delete data permanently' });
   if (req.isGlobal && collegeId && collegeId !== 'all' && !db.colleges.findById(collegeId)) {
     return res.status(400).json({ error: 'College not found' });
   }
@@ -580,8 +590,12 @@ router.post('/data/delete', async (req, res) => {
   const totals = recycle.sumCounts(units.map((u) => recycle.countsOf(u.payload)));
   if (dryRun) return res.json({ dryRun: true, units: units.length, totals });
 
-  await recycle.executeDelete(units, { by: deletedBy(req), permanent: !!permanent && req.isGlobal });
-  res.json({ ok: true, units: units.length, totals, permanent: !!permanent && req.isGlobal });
+  await recycle.executeDelete(units, {
+    by: deletedBy(req),
+    permanent: !!permanent && req.isGlobal,
+    hiddenFromCollege: !!permanent && !req.isGlobal
+  });
+  res.json({ ok: true, units: units.length, totals, permanent: !!permanent });
 });
 
 module.exports = router;

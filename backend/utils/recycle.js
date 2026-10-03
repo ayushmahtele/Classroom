@@ -119,7 +119,9 @@ async function removeLive(kind, p) {
 }
 
 /** Delete a unit but keep it recoverable in the recycle bin. */
-async function trashUnit({ collegeId, teacherId, kind, label, by, payload }) {
+// hiddenFromCollege: a college admin's "permanent" delete — the college admin can
+// no longer see or restore it, but the global admin still can.
+async function trashUnit({ collegeId, teacherId, kind, label, by, payload, hiddenFromCollege = false }) {
   const teacher = teacherId ? db.users.findById(teacherId) : null;
   const teacherName = teacher?.name || null; // kept in case the teacher is later removed
   const rec = {
@@ -128,6 +130,7 @@ async function trashUnit({ collegeId, teacherId, kind, label, by, payload }) {
     teacherId: teacherId || null, teacherName, kind, label, by,
     deletedAt: new Date().toISOString(), counts: countsOf(payload), payload
   };
+  if (hiddenFromCollege) rec.hiddenFromCollege = true;
   await db.trash.insert(rec);
   for (const img of payload.images) await db.trashEvidence(img.filename, rec.id);
   await removeLive(kind, payload);
@@ -282,10 +285,10 @@ function buildDeletePlan(teacherIds, cutoff, cats) {
   return units;
 }
 
-async function executeDelete(units, { by, permanent }) {
+async function executeDelete(units, { by, permanent, hiddenFromCollege = false }) {
   for (const u of units) {
     if (permanent) await eraseUnit(u);
-    else await trashUnit({ ...u, by });
+    else await trashUnit({ ...u, by, hiddenFromCollege });
   }
 }
 

@@ -104,6 +104,7 @@
           <label class="check-item"><input type="radio" name="rScope" value="all" checked /> All teachers</label>
           <label class="check-item"><input type="radio" name="rScope" value="selected" /> Selected teacher(s)</label>
           <label class="check-item"><input type="radio" name="rScope" value="admin" /> <span>Admin's removals <small id="rAdminHint"></small></span></label>
+          <label class="check-item"><input type="radio" name="rScope" value="college_admin" /> <span id="rCollegeAdminLabel">Everything deleted by the college admin</span></label>
         </div>
         <div id="rTeacherBox" style="display:none">
           <div class="check-list scroll" id="rTeacherList"></div>
@@ -142,7 +143,7 @@
           <label class="check-item"><input type="checkbox" id="dCatQuizzes" checked /> Quizzes <small>(with results, proctoring alerts and images)</small></label>
           <label class="check-item"><input type="checkbox" id="dCatImages" checked /> Proctoring images only <small>(the alerts stay in the reports)</small></label>
         </div>
-        <label class="check-item global-only" style="margin-top:14px;color:var(--danger);display:none"><input type="checkbox" id="dPermanent" /> Delete permanently — cannot be restored</label>
+        <label class="check-item" style="margin-top:14px;color:var(--danger)"><input type="checkbox" id="dPermanent" /> <span id="dPermanentLabel">Delete permanently — cannot be restored</span></label>
         <div class="row" style="margin-top:16px">
           <button class="btn secondary" onclick="previewDelete()">Preview what will be deleted</button>
         </div>

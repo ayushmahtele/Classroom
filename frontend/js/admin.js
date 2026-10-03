@@ -37,9 +37,15 @@ async function init() {
   document.getElementById('rAdminHint').textContent = ctx.isGlobal
     ? '(colleges, teachers and students removed by an admin)'
     : '(teachers and students you removed)';
+  document.getElementById('rCollegeAdminLabel').innerHTML = ctx.isGlobal
+    ? 'Everything deleted by the college admin <small>(of the selected college — teachers, students, classes, quizzes and images, including their "permanent" deletes)</small>'
+    : 'Everything I deleted <small>(teachers, students, classes, quizzes and images)</small>';
   document.getElementById('deleteIntro').innerHTML = ctx.isGlobal
     ? 'Delete teachers\' data by time range. Deleted data goes to the recycle bin, so you can bring it back from <b>Restore Data</b> (unless you tick permanent delete). Accounts are never deleted here.'
-    : 'Delete your teachers\' data by time range. Deleted data goes to the recycle bin and can always be brought back from <b>Restore Data</b>. Accounts are never deleted here.';
+    : 'Delete your teachers\' data by time range. Deleted data goes to the recycle bin, so you can bring it back from <b>Restore Data</b>. If you tick permanent delete you can\'t restore it yourself — only the global (platform) admin can. Accounts are never deleted here.';
+  document.getElementById('dPermanentLabel').textContent = ctx.isGlobal
+    ? 'Delete permanently — cannot be restored'
+    : 'Delete permanently — you cannot restore it (only the global admin can)';
 
   if (ctx.isGlobal) await refreshCollegesCache();
   loadStats();
@@ -679,7 +685,7 @@ async function showTrash() {
     const data = await api(`/admin/trash?${q}`);
     trashCache = data.items;
     const hiddenNote = data.hiddenGlobal
-      ? `<p style="color:var(--muted);font-size:13px;margin:8px 0 0">${data.hiddenGlobal} item(s) in this period were deleted by the global (platform) admin and are not shown — only the global admin can restore them.</p>`
+      ? `<p style="color:var(--muted);font-size:13px;margin:8px 0 0">${data.hiddenGlobal} item(s) in this period were deleted by the global (platform) admin or permanently deleted by you, and are not shown — only the global admin can restore them.</p>`
       : '';
     if (!data.items.length) {
       box.innerHTML = `<div class="panel"><p style="margin:0;color:var(--muted)">Nothing deleted in this period — there is nothing to restore.</p>${hiddenNote}</div>`;
@@ -771,7 +777,7 @@ function deleteRequest(extra = {}) {
     collegeId: ctx.isGlobal ? document.getElementById('dCollege').value : undefined,
     scope, teacherIds, categories,
     range: document.getElementById('dRange').value,
-    permanent: ctx.isGlobal && document.getElementById('dPermanent').checked,
+    permanent: document.getElementById('dPermanent').checked,
     ...extra
   };
 }
@@ -791,7 +797,9 @@ async function previewDelete() {
         <h3 style="color:var(--danger)">This will delete</h3>
         <p style="font-size:14px">${esc(totalsText(r.totals))}</p>
         <p style="color:var(--muted);font-size:13px">
-          ${body.permanent ? '<b style="color:var(--danger)">Permanent — this cannot be undone.</b>' : 'You can bring it back later from Restore Data.'}
+          ${!body.permanent ? 'You can bring it back later from Restore Data.'
+            : ctx.isGlobal ? '<b style="color:var(--danger)">Permanent — this cannot be undone.</b>'
+            : '<b style="color:var(--danger)">Permanent — you will not be able to restore it. Only the global admin can.</b>'}
         </p>
         <button class="btn danger" onclick="runDelete()">${body.permanent ? 'Delete permanently' : 'Delete now'}</button>
       </div>`;
@@ -803,7 +811,10 @@ async function previewDelete() {
 async function runDelete() {
   const body = deleteRequest();
   if (!body) return;
-  if (!confirm(body.permanent ? 'Permanently delete this data? This cannot be undone.' : 'Delete this data? (It can be restored from Restore Data.)')) return;
+  const msg = !body.permanent ? 'Delete this data? (It can be restored from Restore Data.)'
+    : ctx.isGlobal ? 'Permanently delete this data? This cannot be undone.'
+    : 'Permanently delete this data?\n\nYou will NOT be able to restore it. Only the global (platform) admin can bring it back.';
+  if (!confirm(msg)) return;
   if (body.scope === 'all' && body.range === 'all') {
     const whose = ctx.isGlobal
       ? (body.collegeId === 'all' ? 'ALL teachers of ALL colleges' : 'ALL teachers of this college')
@@ -815,7 +826,7 @@ async function runDelete() {
     const r = await api('/admin/data/delete', { method: 'POST', body });
     document.getElementById('dResult').innerHTML = `
       <div class="panel"><p style="margin:0">✅ Deleted: ${esc(totalsText(r.totals))}.
-      ${r.permanent ? '' : 'You can restore it from <b>Restore Data</b>.'}</p></div>`;
+      ${!r.permanent ? 'You can restore it from <b>Restore Data</b>.' : ctx.isGlobal ? '' : 'Only the global admin can restore it.'}</p></div>`;
     loadStats();
   } catch (e) { alert(e.message); }
 }
