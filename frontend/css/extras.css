@@ -125,3 +125,14 @@ body.rv-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .rv-row:hover td { transition: none; }
 }
+
+/* Reset password panel: Show button inside the new-password box */
+.pw-field { position: relative; }
+.pw-field input { padding-right: 64px; }
+.pw-show {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  border: none; background: transparent; color: var(--primary);
+  font-size: 12px; font-weight: 600; padding: 6px 8px; border-radius: 6px; cursor: pointer;
+}
+.pw-show:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pw-form + .pw-explain, .panel > .pw-explain { max-width: 520px; }

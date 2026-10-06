@@ -36,8 +36,8 @@ async function loadProfile(role) {
 
       <div class="panel" id="pwPanel"></div>`;
 
-    // Change password, or reset it with a code sent to the account email
-    renderPasswordPanel(document.getElementById('pwPanel'), { email: p.email });
+    // Reset password (new + confirm only)
+    renderPasswordPanel(document.getElementById('pwPanel'));
   } catch (err) {
     box.innerHTML = `<p class="error-msg">${pfEsc(err.message)}</p>`;
   }

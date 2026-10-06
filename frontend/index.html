@@ -33,7 +33,7 @@
 
     <!-- ===== Sign in ===== -->
     <section id="loginView">
-      <form id="loginForm" novalidate>
+      <form id="loginForm" data-enter-next novalidate>
         <label for="loginId" id="loginIdLabel">Student ID or Email</label>
         <input id="loginId" type="text" placeholder="e.g. STU2048 or you@email.com" autocomplete="username" autocapitalize="none" spellcheck="false" required />
 
@@ -67,7 +67,7 @@
       </ol>
 
       <!-- Step 1: Student/Teacher/Admin ID or email -->
-      <form id="fpStep1" novalidate>
+      <form id="fpStep1" data-enter-next novalidate>
         <p class="fp-text">We'll email a 6-digit code to the address attached to your account. Find your account by:</p>
         <div class="seg" role="radiogroup" aria-label="Find account by">
           <button type="button" class="active" data-by="id" role="radio" aria-checked="true" id="segIdBtn">Student ID</button>
@@ -101,7 +101,7 @@
       </form>
 
       <!-- Step 3: new password -->
-      <form id="fpStep3" hidden novalidate>
+      <form id="fpStep3" hidden data-enter-next novalidate>
         <p class="fp-text">Code verified. Choose a new password (at least 6 characters).</p>
         <label for="fpNew">New password</label>
         <div class="pw-wrap">
@@ -119,6 +119,7 @@
 </div>
 
 <script src="js/api.js"></script>
+<script src="js/enter-next.js"></script>
 <script>
 let role = 'student';
 const $ = (id) => document.getElementById(id);

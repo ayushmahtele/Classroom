@@ -60,8 +60,8 @@
 
         <div class="panel" id="infoPwPanel"></div>`;
 
-      // Change password, or reset it with a code sent to the account email
-      renderPasswordPanel(document.getElementById('infoPwPanel'), { email: p.email });
+      // Reset password (new + confirm only)
+      renderPasswordPanel(document.getElementById('infoPwPanel'));
     } catch (err) {
       box.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
     }

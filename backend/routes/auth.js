@@ -350,6 +350,33 @@ router.post('/forgot-password/verify-code', async (req, res) => {
   res.json({ ok: true, resetToken });
 });
 
+// ---- Reset password inside the dashboard (My Profile / My Info) -------------
+// A signed-in student / teacher / college admin / global admin sets a new
+// password straight away: only the new password (and its confirmation on the
+// page) is asked, not the current one. As a safety net the account's email
+// gets a short "your password was changed" notice.
+router.post('/me/reset-password', authRequired, async (req, res) => {
+  const user = db.users.findById(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const { newPassword } = req.body || {};
+  if (!newPassword || String(newPassword).length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  }
+  const passwordHash = await bcrypt.hash(String(newPassword), 10);
+  await db.users.update(user.id, { passwordHash, mustChangePassword: false, resetRequested: null });
+  res.json({ ok: true });
+
+  if (user.email && isMailConfigured()) {
+    const when = new Date().toUTCString();
+    sendMail({
+      to: user.email,
+      subject: 'Your Classroom password was changed',
+      text: `Hi ${user.name || ''},\n\nThe password of your Classroom ${user.role} account (${user.loginId}) was changed on ${when}.\nIf this wasn't you, use "Forgot password?" on the sign-in page right away to set a new one, and tell your teacher/admin.`,
+      html: `<div style="font-family:Segoe UI,Roboto,Arial,sans-serif;max-width:460px;margin:0 auto;padding:24px;color:#1c2230"><h2 style="margin:0 0 8px;font-size:19px">Your password was changed</h2><p style="color:#6b7385;font-size:14px;line-height:1.5">The password of your Classroom ${user.role} account (<b>${user.loginId}</b>) was changed on ${when}.</p><p style="color:#6b7385;font-size:14px;line-height:1.5">If this wasn't you, use <b>Forgot password?</b> on the sign-in page right away to set a new one, and tell your teacher/admin.</p></div>`
+    }).catch((err) => console.error('Password-changed notice failed:', err.message));
+  }
+});
+
 // ---- "Forgot your current password?" inside the dashboard ------------------
 // For a signed-in student / teacher / college admin / global admin who doesn't
 // remember their current password: a 6-digit code goes to their own email,
