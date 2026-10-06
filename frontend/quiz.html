@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
 <meta name="theme-color" content="#bd0e0e" />
 <link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="css/screen-share.css?v=1" />
 </head>
 <body>
 
@@ -24,6 +25,15 @@
       <li>No phones or notes in view</li>
     </ul>
     <video id="preCheckVideo" autoplay muted playsinline style="width:100%;border-radius:10px;background:#000;margin:10px 0"></video>
+    <!-- Laptop / desktop only (hidden on phones and tablets) -->
+    <div class="screen-step" id="screenStep" hidden>
+      <div class="screen-step-text">
+        <b>Share your entire screen</b>
+        <span>On a laptop or desktop this is required. If you switch tabs or apps, a screenshot of your screen is sent to your teacher instead of a camera photo.</span>
+      </div>
+      <button class="btn secondary" type="button" id="screenBtn" onclick="shareScreen()">Share screen</button>
+      <div class="screen-status" id="screenStatus" role="status"></div>
+    </div>
     <div class="error-msg" id="preCheckError"></div>
     <button class="btn full" id="startBtn" onclick="beginQuiz()" disabled>Preparing…</button>
   </div>
@@ -32,6 +42,10 @@
 <!-- Main quiz UI -->
 <div class="quiz-shell" id="quizShell" style="display:none">
   <div class="quiz-main">
+    <div class="screen-lost" id="screenLost" hidden role="alert">
+      <span>Screen sharing stopped. Please share your entire screen again.</span>
+      <button class="btn small" type="button" onclick="reshareScreen()">Share screen</button>
+    </div>
     <div class="row between">
       <h2 id="quizTitle">Quiz</h2>
       <div class="timer" id="timerDisplay">--:--</div>

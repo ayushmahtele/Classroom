@@ -9,6 +9,42 @@ let currentIndex = 0;
 let timerInterval = null;
 let deadline = null;
 
+// ---- Laptop / desktop: share the entire screen before starting -----------
+// (phones and tablets can't share their screen; they skip this step)
+let preCheckReady = false;
+const needsScreen = Proctor.isLaptop();
+if (needsScreen) document.getElementById('screenStep').hidden = false;
+
+function updateStartButton() {
+  const startBtn = document.getElementById('startBtn');
+  if (!preCheckReady) return;
+  const ok = !needsScreen || Proctor.isSharingScreen();
+  startBtn.disabled = !ok;
+  startBtn.textContent = ok ? 'Enable camera & start quiz' : 'Share your screen to start';
+}
+async function shareScreen() {
+  const status = document.getElementById('screenStatus');
+  const btn = document.getElementById('screenBtn');
+  status.className = 'screen-status';
+  status.textContent = '';
+  try {
+    await Proctor.requestScreen();
+    status.className = 'screen-status ok';
+    status.textContent = '✓ Sharing your entire screen';
+    btn.textContent = 'Share again';
+  } catch (e) {
+    status.className = 'screen-status bad';
+    status.textContent = e.name === 'NotAllowedError' ? 'Screen sharing was cancelled. It is required to start this quiz.' : e.message;
+  }
+  updateStartButton();
+}
+async function reshareScreen() {
+  try {
+    await Proctor.requestScreen();
+    document.getElementById('screenLost').hidden = true;
+  } catch (e) { /* stays visible; tab-switch evidence uses the camera meanwhile */ }
+}
+
 // ---- Pre-check: warm up camera + models before the quiz officially starts
 (async function preCheck() {
   const errorEl = document.getElementById('preCheckError');
@@ -18,8 +54,8 @@ let deadline = null;
   try {
     await Proctor.requestCamera(document.getElementById('preCheckVideo'));
     await Proctor.loadModels((msg) => (startBtn.textContent = msg));
-    startBtn.disabled = false;
-    startBtn.textContent = 'Enable camera & start quiz';
+    preCheckReady = true;
+    updateStartButton();
   } catch (e) {
     errorEl.textContent = 'Camera access is required to take a proctored quiz: ' + e.message;
   }
@@ -27,6 +63,11 @@ let deadline = null;
 
 async function beginQuiz() {
   const errorEl = document.getElementById('preCheckError');
+  if (needsScreen && !Proctor.isSharingScreen()) {
+    errorEl.textContent = 'Please share your entire screen first.';
+    updateStartButton();
+    return;
+  }
   try {
     await document.documentElement.requestFullscreen?.();
   } catch (e) { /* some browsers/devices restrict this - continue anyway */ }
@@ -55,6 +96,10 @@ async function beginQuiz() {
     flagAttempt: (field) => api(`/student/attempts/${attempt.id}/flag`, { method: 'POST', body: { field } }).catch(() => {}),
     onFullscreenExit: () => {
       logProctorEvent({ type: 'SYSTEM', meta: {}, timestamp: new Date().toISOString(), note: 'Please return to fullscreen.' });
+    },
+    onScreenShareLost: () => {
+      document.getElementById('screenLost').hidden = false;
+      logProctorEvent({ type: 'SYSTEM', meta: {}, timestamp: new Date().toISOString(), note: 'Screen sharing stopped — please share your screen again.' });
     },
     onCameraLost: () => {
       document.getElementById('camStatus').textContent = 'Camera disconnected!';

@@ -17,6 +17,8 @@
  *  - PHONE_DETECTED       a cell phone recognised in frame (COCO-SSD)
  *  - OBJECT_DETECTED      another suspicious object (book, remote, laptop#2...)
  *  - TAB_SWITCH            browser tab/window lost focus or was hidden
+ *                          (laptop/desktop: evidence is a screenshot of the shared
+ *                          screen; phone/tablet: camera photo, as before)
  *  - FULLSCREEN_EXIT       student left fullscreen mode
  *  - COPY_PASTE            copy or paste attempted during the quiz
  *  - RIGHT_CLICK           right-click / context menu attempted
@@ -197,6 +199,90 @@ const Proctor = (() => {
     });
   }
 
+  // ---- Laptop / desktop only: screenshot of the screen for TAB_SWITCH ------
+  // On a laptop/desktop the student shares their entire screen before the quiz.
+  // When a tab switch is reported, the evidence image is a screenshot of the
+  // screen (what they switched to) instead of a camera photo. Phones and
+  // tablets can't share their screen, so they keep the camera photo as before.
+  // Nothing here changes WHEN events are detected or reported.
+  const MAX_SCREEN_SHOTS = 10;      // per attempt; after that, camera photos again
+  const SCREEN_SHOT_DELAY_MS = 700; // let the screen show where the student went
+  const SCREEN_SHOT_MAX_W = 1280;
+  let screenStream = null;
+  let screenVideo = null;
+  let screenShots = 0;
+
+  function isLaptop() {
+    const ua = navigator.userAgent || '';
+    if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') return false;
+    if (navigator.userAgentData?.mobile) return false;
+    if (/Android|iPhone|iPad|iPod|Mobile|Silk|Kindle/i.test(ua)) return false;
+    if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return false; // iPad in desktop mode
+    return true;
+  }
+
+  async function requestScreen() {
+    const s = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: 'monitor', frameRate: { ideal: 5, max: 10 } },
+      audio: false,
+      monitorTypeSurfaces: 'include'
+    });
+    const track = s.getVideoTracks()[0];
+    const surface = track?.getSettings?.().displaySurface;
+    if (surface && surface !== 'monitor') {
+      s.getTracks().forEach((t) => t.stop());
+      throw new Error('Please choose "Entire screen" (not a window or a tab), so other tabs and apps are visible.');
+    }
+    if (screenStream) screenStream.getTracks().forEach((t) => t.stop());
+    screenStream = s;
+    screenVideo = document.createElement('video');
+    screenVideo.muted = true;
+    screenVideo.playsInline = true;
+    screenVideo.srcObject = s;
+    await screenVideo.play().catch(() => {});
+    track.addEventListener('ended', () => {
+      if (screenStream !== s) return;
+      screenStream = null;
+      cfg?.onScreenShareLost?.();
+    });
+    return s;
+  }
+
+  function isSharingScreen() {
+    return !!screenStream && screenStream.getVideoTracks()[0]?.readyState === 'live';
+  }
+
+  async function grabScreenBlob() {
+    if (!isSharingScreen()) return null;
+    const track = screenStream.getVideoTracks()[0];
+    let src = null; let w = 0; let h = 0;
+    if ('ImageCapture' in window) {
+      try { src = await new ImageCapture(track).grabFrame(); w = src.width; h = src.height; } catch (e) { src = null; }
+    }
+    if (!src && screenVideo?.videoWidth) { src = screenVideo; w = screenVideo.videoWidth; h = screenVideo.videoHeight; }
+    if (!src || !w || !h) return null;
+    const scale = Math.min(1, SCREEN_SHOT_MAX_W / w);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    canvas.getContext('2d').drawImage(src, 0, 0, canvas.width, canvas.height);
+    src.close?.();
+    return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.6));
+  }
+
+  // Evidence for one event: a screen screenshot for TAB_SWITCH on a laptop
+  // that is sharing its screen, otherwise the camera photo (as before).
+  async function captureEvidence(type) {
+    if (type === 'TAB_SWITCH' && isSharingScreen() && screenShots < MAX_SCREEN_SHOTS) {
+      await new Promise((r) => setTimeout(r, SCREEN_SHOT_DELAY_MS));
+      try {
+        const blob = await grabScreenBlob();
+        if (blob) { screenShots++; return { blob, capture: 'screen' }; }
+      } catch (e) { console.warn('Screen capture failed, using camera photo:', e.message); }
+    }
+    return { blob: await captureEvidenceBlob(), capture: 'camera' };
+  }
+
   // onset=true marks the first report of a new violation episode (used so the
   // attempt's tabSwitches/fullscreenExits counters count episodes, not seconds).
   async function fireEvent(type, confidence, meta, onset = false) {
@@ -212,13 +298,13 @@ const Proctor = (() => {
     if (onset && type === 'FULLSCREEN_EXIT') cfg.flagAttempt?.('fullscreenExits');
 
     try {
-      const blob = await captureEvidenceBlob();
+      const { blob, capture } = await captureEvidence(type);
       const form = new FormData();
       form.append('attemptId', cfg.attemptId);
       form.append('quizId', cfg.quizId);
       form.append('type', type);
       if (confidence != null) form.append('confidence', String(confidence));
-      form.append('meta', JSON.stringify(meta || {}));
+      form.append('meta', JSON.stringify({ ...(meta || {}), capture }));
       if (blob) form.append('evidence', blob, 'evidence.jpg');
       await api('/proctor/events', { method: 'POST', body: form, isForm: true });
     } catch (e) {
@@ -438,6 +524,15 @@ const Proctor = (() => {
     getStream() {
       return stream;
     },
+    isLaptop() {
+      return isLaptop();
+    },
+    async requestScreen() {
+      return requestScreen();
+    },
+    isSharingScreen() {
+      return isSharingScreen();
+    },
     start() {
       if (running) return;
       running = true;
@@ -470,6 +565,7 @@ const Proctor = (() => {
       document.removeEventListener('paste', onCopyOrPaste);
       document.removeEventListener('contextmenu', onContextMenu);
       if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (screenStream) { screenStream.getTracks().forEach((t) => t.stop()); screenStream = null; }
     }
   };
 })();
