@@ -54,9 +54,12 @@
 
     <!-- ===== Forgot password (3 steps) ===== -->
     <section id="forgotView" hidden>
+      <div class="fp-top">
+        <button type="button" class="fp-back-top" id="fpBackTop" aria-label="Back to sign in">&lsaquo; Back</button>
+        <span class="fp-step-label" id="fpStepLabel">Step 1 of 3</span>
+      </div>
       <div class="fp-head">
         <h2 id="fpTitle">Reset student password</h2>
-        <div class="fp-steps" aria-hidden="true"><span class="on"></span><span></span><span></span></div>
       </div>
 
       <!-- Step 1: Student/Teacher/Admin ID or email -->
@@ -211,11 +214,15 @@ function closeForgot() {
 }
 $('forgotLink').addEventListener('click', (e) => { e.preventDefault(); openForgot(); });
 $('fpBack').addEventListener('click', closeForgot);
+// Top "Back": always returns to the sign-in form
+let fpStep = 1;
+$('fpBackTop').addEventListener('click', closeForgot);
 $('fpChange').addEventListener('click', () => showFpStep(1));
 
 function showFpStep(n) {
   [1, 2, 3].forEach((i) => { $('fpStep' + i).hidden = i !== n; $('fpErr' + i).textContent = ''; });
-  document.querySelectorAll('.fp-steps span').forEach((s, i) => s.classList.toggle('on', i < n));
+  fpStep = n;
+  $('fpStepLabel').textContent = `Step ${n} of 3`;
   if (n === 1) { clearInterval(resendTimer); fpResetToken = ''; setTimeout(() => $('fpId').focus(), 0); }
   if (n === 2) { clearOtp(); setTimeout(() => otpInputs[0].focus(), 0); }
   if (n === 3) { $('fpNew').value = ''; $('fpConfirm').value = ''; setTimeout(() => $('fpNew').focus(), 0); }
