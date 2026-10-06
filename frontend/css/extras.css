@@ -152,3 +152,7 @@ body.rv-open { overflow: hidden; }
   #attRows td.att-check-cell input[type=checkbox] { width: 24px; height: 24px; margin-left: auto; }
   #attRows tr.att-absent { border-color: #f3c1c4; }
 }
+
+/* Attendance history: "Showing today" line */
+.att-hist-hint { margin: 4px 0 10px; font-size: 13px; }
+.att-hist-hint b { color: var(--text); }

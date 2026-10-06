@@ -824,7 +824,18 @@ function renderAttendanceHistory() {
   const to = document.getElementById('attTo').value;
   const sf = document.getElementById('attStatusFilter').value;
   const q = lc(document.getElementById('attSearch').value.trim());
+  // No filter in use -> only today's attendance. Any filter -> all matching days.
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const onlyToday = !from && !to && !sf && !q;
+  const hint = document.getElementById('attHistHint');
+  if (hint) {
+    hint.innerHTML = onlyToday
+      ? `Showing <b>today</b> (${escapeHtml(today)}). Use the filters above to see other days.`
+      : 'Showing all days that match your filters.';
+  }
   const rows = attHistoryCache
+    .filter((r) => !onlyToday || r.date === today)
     .filter((r) => (!from || r.date >= from) && (!to || r.date <= to))
     .filter((r) => !sf || r.status === sf)
     .filter((r) => !q || lc(r.studentName).includes(q) || lc(r.studentRoll).includes(q));
@@ -839,7 +850,7 @@ function renderAttendanceHistory() {
   const badge = (s) => `<span class="badge ${s === 'present' ? 'ok' : s === 'late' ? 'warn' : 'danger'}">${escapeHtml(s)}</span>`;
   document.getElementById('attHistoryRows').innerHTML = rows.map((r) => `
     <tr><td>${escapeHtml(r.date)}</td><td><b>${escapeHtml(r.studentRoll || '-')}</b></td><td>${escapeHtml(r.studentName)}</td><td>${badge(r.status)}</td></tr>
-  `).join('') || `<tr><td colspan="4" style="color:var(--muted)">${attHistoryCache.length ? 'No records match your filters.' : 'No attendance recorded yet.'}</td></tr>`;
+  `).join('') || `<tr><td colspan="4" style="color:var(--muted)">${!attHistoryCache.length ? 'No attendance recorded yet.' : onlyToday ? 'No attendance saved for today yet. Use the filters above to see earlier days.' : 'No records match your filters.'}</td></tr>`;
 }
 
 // ---------------- Proctoring reports (view only — detection is unchanged) -----------
