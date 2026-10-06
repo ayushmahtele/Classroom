@@ -89,19 +89,40 @@ async function sendMail({ to, subject, text, html }) {
   }
 
   if (mode === 'gas') {
-    const res = await fetch(process.env.GAS_MAIL_URL, {
-      method: 'POST',
-      redirect: 'follow', // Apps Script answers through a redirect
-      signal: AbortSignal.timeout(25000),
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret: process.env.GAS_MAIL_SECRET, to, subject, text, html, name: from.name })
-    });
+    // Step 1: POST to script.google.com. Apps Script runs doPost (sends the
+    // email) and answers with a redirect to where its JSON result can be read.
+    // Step 2: read that result. Done by hand so each step has its own timeout
+    // and the log says exactly which step was slow.
+    const t0 = Date.now();
+    let res;
+    try {
+      res = await fetch(process.env.GAS_MAIL_URL.trim(), {
+        method: 'POST',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(45000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: String(process.env.GAS_MAIL_SECRET).trim(), to, subject, text, html, name: from.name })
+      });
+    } catch (err) {
+      throw new Error(`Apps Script step 1 (POST to script.google.com) failed after ${Date.now() - t0}ms: ${err.message}`);
+    }
+    if ([301, 302, 303, 307, 308].includes(res.status)) {
+      const location = new URL(res.headers.get('location'), process.env.GAS_MAIL_URL.trim()).href;
+      const t1 = Date.now();
+      console.log(`Apps Script step 1 done in ${t1 - t0}ms`);
+      try {
+        res = await fetch(location, { signal: AbortSignal.timeout(20000) });
+      } catch (err) {
+        throw new Error(`Apps Script step 2 (reading result) failed after ${Date.now() - t1}ms: ${err.message}`);
+      }
+    }
     const raw = await res.text();
     let out = null;
     try { out = JSON.parse(raw); } catch (_) { /* not JSON */ }
     if (!res.ok || !out || !out.ok) {
       throw new Error(`Apps Script send failed (${res.status}) ${out ? out.error : raw.slice(0, 200)}`);
     }
+    console.log(`Reset code email sent via Apps Script in ${Date.now() - t0}ms`);
     return;
   }
 
