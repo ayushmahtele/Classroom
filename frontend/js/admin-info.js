@@ -1,4 +1,4 @@
-// "My Info" section for college admins and the global admin (admin.html).
+// "My Profile" section for college admins and the global admin (admin.html).
 // Kept in its own file so nothing inside admin.js had to change.
 (function () {
   const btn = document.querySelector('.nav-btn[data-view="info"]');
