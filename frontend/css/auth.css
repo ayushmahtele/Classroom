@@ -1,0 +1,56 @@
+/* Sign-in page: forgot-password header (Back button + step progress).
+   Kept in its own file so it doesn't depend on edits to style.css. */
+.fp-back-top {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin: 2px 0 0 -6px; padding: 6px 10px 6px 6px;
+  border: none; border-radius: 8px; background: transparent;
+  color: var(--primary); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.fp-back-top:hover { background: #eef0ff; }
+.fp-back-top:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.fp-back-top svg { flex: 0 0 auto; }
+
+.fp-title { font-size: 17px; margin: 8px 0 12px; }
+
+.fp-stepper {
+  list-style: none; margin: 0 0 14px; padding: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+}
+.fp-stepper li {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--muted); text-align: center; min-width: 0;
+}
+/* connector line between the circles */
+.fp-stepper li:not(:first-child)::before {
+  content: ''; position: absolute; top: 12px; right: calc(50% + 16px); width: calc(100% - 26px);
+  height: 2px; background: var(--border); border-radius: 2px;
+}
+.fp-stepper li.done:not(:first-child)::before,
+.fp-stepper li.current:not(:first-child)::before { background: var(--primary); }
+.fp-stepper .dot {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; background: var(--bg); border: 2px solid var(--border); color: var(--muted);
+  position: relative; z-index: 1; transition: background .2s, border-color .2s, color .2s;
+}
+.fp-stepper li.current .dot { background: var(--primary); border-color: var(--primary); color: #fff; }
+.fp-stepper li.done .dot { background: #fff; border-color: var(--primary); color: var(--primary); }
+.fp-stepper li.current .txt { color: var(--text); font-weight: 600; }
+.fp-stepper .txt { line-height: 1.25; overflow-wrap: anywhere; }
+
+/* hide the old step widgets if an older style.css is still cached */
+.fp-steps, .fp-step-label { display: none !important; }
+
+@media (max-width: 340px) {
+  .fp-stepper .txt { font-size: 11px; }
+  .fp-stepper li:not(.current) .txt { display: none; }
+}
+@media (min-width: 768px) {
+  .fp-title { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fp-stepper .dot { transition: none; }
+}
+
+/* account-type tabs are hidden while resetting a password */
+.role-tabs[hidden] { display: none !important; }
+#forgotView:not([hidden]) .fp-back-top { margin-top: 0; }

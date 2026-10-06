@@ -455,6 +455,14 @@ td.actions { white-space: nowrap; }
 #forgotView[hidden], #loginView[hidden], .forgot-row[hidden], #forgotView form[hidden] { display: none; }
 .fp-head { margin: 12px 0 6px; }
 .fp-head h2 { font-size: 17px; margin: 0; }
+.fp-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 0 0; }
+.fp-back-top {
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+}
+.fp-back-top:hover { border-color: var(--primary); color: var(--primary); }
+.fp-back-top:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.fp-step-label { font-size: 12px; color: var(--muted); font-weight: 600; }
 .fp-text { font-size: 13px; color: var(--muted); margin: 6px 0 12px; line-height: 1.5; }
 .fp-text strong { color: var(--text); word-break: break-all; }
 

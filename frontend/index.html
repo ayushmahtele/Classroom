@@ -8,7 +8,8 @@
 <link rel="shortcut icon" href="favicon.ico" />
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
 <meta name="theme-color" content="#bd0e0e" />
-<link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="css/style.css?v=5" />
+<link rel="stylesheet" href="css/auth.css?v=5" />
 </head>
 <body>
 <div class="center-screen auth-screen">
@@ -54,13 +55,16 @@
 
     <!-- ===== Forgot password (3 steps) ===== -->
     <section id="forgotView" hidden>
-      <div class="fp-top">
-        <button type="button" class="fp-back-top" id="fpBackTop" aria-label="Back to sign in">&lsaquo; Back</button>
-        <span class="fp-step-label" id="fpStepLabel">Step 1 of 3</span>
-      </div>
-      <div class="fp-head">
-        <h2 id="fpTitle">Reset student password</h2>
-      </div>
+      <button type="button" class="fp-back-top" id="fpBackTop">
+        <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back to sign in
+      </button>
+      <h2 class="fp-title" id="fpTitle">Reset student password</h2>
+      <ol class="fp-stepper" id="fpStepper" aria-label="Password reset progress">
+        <li class="current" data-step="1"><span class="dot">1</span><span class="txt">Find account</span></li>
+        <li data-step="2"><span class="dot">2</span><span class="txt">Enter code</span></li>
+        <li data-step="3"><span class="dot">3</span><span class="txt">New password</span></li>
+      </ol>
 
       <!-- Step 1: Student/Teacher/Admin ID or email -->
       <form id="fpStep1" novalidate>
@@ -110,7 +114,6 @@
         <div class="error-msg" id="fpErr3" role="alert"></div>
       </form>
 
-      <button type="button" class="link-btn fp-back" id="fpBack">Back to sign in</button>
     </section>
   </div>
 </div>
@@ -194,7 +197,11 @@ let fpIdentifier = '';
 let fpResetToken = '';
 let resendTimer = null;
 
+// The account type (Student / Teacher / Admin) picked on the sign-in page is
+// kept for the reset, so the tabs are hidden while resetting.
+const roleTabs = document.querySelector('.role-tabs');
 function openForgot() {
+  roleTabs.hidden = true;
   $('loginView').hidden = true;
   $('forgotRow').hidden = true;
   $('googleBox').hidden = true;
@@ -205,6 +212,7 @@ function openForgot() {
   showFpStep(1);
 }
 function closeForgot() {
+  roleTabs.hidden = false;
   clearInterval(resendTimer);
   fpResetToken = '';
   $('forgotView').hidden = true;
@@ -213,7 +221,6 @@ function closeForgot() {
   if (googleReady) { $('googleBox').hidden = false; renderGoogleBtn(true); }
 }
 $('forgotLink').addEventListener('click', (e) => { e.preventDefault(); openForgot(); });
-$('fpBack').addEventListener('click', closeForgot);
 // Top "Back": always returns to the sign-in form
 let fpStep = 1;
 $('fpBackTop').addEventListener('click', closeForgot);
@@ -222,7 +229,13 @@ $('fpChange').addEventListener('click', () => showFpStep(1));
 function showFpStep(n) {
   [1, 2, 3].forEach((i) => { $('fpStep' + i).hidden = i !== n; $('fpErr' + i).textContent = ''; });
   fpStep = n;
-  $('fpStepLabel').textContent = `Step ${n} of 3`;
+  document.querySelectorAll('#fpStepper li').forEach((li) => {
+    const k = Number(li.dataset.step);
+    li.classList.toggle('done', k < n);
+    li.classList.toggle('current', k === n);
+    li.querySelector('.dot').textContent = k < n ? '\u2713' : String(k);
+    if (k === n) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+  });
   if (n === 1) { clearInterval(resendTimer); fpResetToken = ''; setTimeout(() => $('fpId').focus(), 0); }
   if (n === 2) { clearOtp(); setTimeout(() => otpInputs[0].focus(), 0); }
   if (n === 3) { $('fpNew').value = ''; $('fpConfirm').value = ''; setTimeout(() => $('fpNew').focus(), 0); }

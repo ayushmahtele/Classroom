@@ -266,14 +266,9 @@ router.post('/forgot-password/send-code', async (req, res) => {
 
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
   const expiresAt = now + CODE_MINUTES * 60 * 1000;
-  try {
-    const mail = resetCodeEmail({ name: user.name, code, role: user.role, minutes: CODE_MINUTES });
-    await sendMail({ to: user.email, ...mail });
-  } catch (err) {
-    console.error('Reset code email failed:', err.message);
-    return res.status(502).json({ error: 'Could not send the email right now. Please try again in a minute.' });
-  }
 
+  // Save the code BEFORE emailing it, so a code that arrives is always valid
+  // even if the email service answers slowly.
   await db.passwordResets.set(user.id, {
     codeHash: codeHash(user.id, code),
     expiresAt,
@@ -284,6 +279,28 @@ router.post('/forgot-password/send-code', async (req, res) => {
     tokenExpiresAt: null,
     expireAt: new Date(now + 2 * 60 * 60 * 1000) // MongoDB cleans the record up after 2h
   });
+
+  // Send the email. If it finishes within a few seconds we report the real
+  // result; if the email service is just slow to confirm (Apps Script often
+  // is), we move the user on to the code screen and let it finish in the
+  // background. "Resend code" is there if it never arrives.
+  const mail = resetCodeEmail({ name: user.name, code, role: user.role, minutes: CODE_MINUTES });
+  const sending = sendMail({ to: user.email, ...mail }).then(
+    () => ({ ok: true }),
+    (err) => ({ ok: false, err })
+  );
+  const QUICK_WAIT_MS = 4000;
+  const result = await Promise.race([sending, new Promise((r) => setTimeout(() => r(null), QUICK_WAIT_MS))]);
+
+  if (result && !result.ok) {
+    console.error('Reset code email failed:', result.err.message);
+    // undo, so the user can try again straight away
+    await db.passwordResets.update(user.id, { codeHash: null, lastSentAt: prev?.lastSentAt || 0, sends });
+    return res.status(502).json({ error: 'Could not send the email right now. Please try again in a minute.' });
+  }
+  if (!result) {
+    sending.then((r) => { if (!r.ok) console.error('Reset code email failed (background):', r.err.message); });
+  }
 
   res.json({ ok: true, maskedEmail: maskEmail(user.email), expiresInMinutes: CODE_MINUTES, resendAfter: RESEND_SECONDS });
 });
