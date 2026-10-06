@@ -906,7 +906,7 @@ function renderProctorEvents() {
       <td>${escapeHtml(ev.quizTitle || '-')}</td>
       <td><span class="badge ${severityClass(ev.type)}">${escapeHtml(ev.type.replace(/_/g, ' '))}</span></td>
       <td>${ev.confidence ? Math.round(ev.confidence * 100) + '%' : '-'}</td>
-      <td>${ev.evidenceFile ? `<a href="#" onclick="viewEvidence('${ev.evidenceFile}');return false;">${ev.meta?.capture === 'screen' ? 'View screenshot' : 'View'}</a> &nbsp;|&nbsp; <a href="#" style="color:var(--danger)" onclick="deleteEvidenceImage('${ev.id}');return false;">Delete image</a>` : '-'}</td>
+      <td>${ev.evidenceFile ? `<a href="#" onclick="viewEvidence('${ev.evidenceFile}');return false;">View</a> &nbsp;|&nbsp; <a href="#" style="color:var(--danger)" onclick="deleteEvidenceImage('${ev.id}');return false;">Delete image</a>` : '-'}</td>
     </tr>
   `).join('') || `<tr><td colspan="8" style="color:var(--muted)">${prCache.length ? 'No alerts match your filters.' : 'No proctoring alerts recorded.'}</td></tr>`;
 }

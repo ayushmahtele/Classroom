@@ -9,47 +9,6 @@ let currentIndex = 0;
 let timerInterval = null;
 let deadline = null;
 
-// ---- Laptop / desktop: share the entire screen before starting -----------
-// (phones and tablets can't share their screen; they skip this step)
-let preCheckReady = false;
-const needsScreen = typeof Proctor.isLaptop === 'function' && Proctor.isLaptop();
-if (needsScreen) document.getElementById('screenStep').hidden = false;
-
-function updateStartButton() {
-  const startBtn = document.getElementById('startBtn');
-  if (!preCheckReady) return;
-  if (!needsScreen) { // phones / tablets: exactly as before
-    startBtn.disabled = false;
-    startBtn.textContent = 'Enable camera & start quiz';
-    return;
-  }
-  const ok = !needsScreen || Proctor.isSharingScreen();
-  startBtn.disabled = !ok;
-  startBtn.textContent = ok ? 'Enable camera & start quiz' : 'Share your screen to start';
-}
-async function shareScreen() {
-  const status = document.getElementById('screenStatus');
-  const btn = document.getElementById('screenBtn');
-  status.className = 'screen-status';
-  status.textContent = '';
-  try {
-    await Proctor.requestScreen();
-    status.className = 'screen-status ok';
-    status.textContent = '✓ Sharing your entire screen';
-    btn.textContent = 'Share again';
-  } catch (e) {
-    status.className = 'screen-status bad';
-    status.textContent = e.name === 'NotAllowedError' ? 'Screen sharing was cancelled. It is required to start this quiz.' : e.message;
-  }
-  updateStartButton();
-}
-async function reshareScreen() {
-  try {
-    await Proctor.requestScreen();
-    document.getElementById('screenLost').hidden = true;
-  } catch (e) { /* stays visible; tab-switch evidence uses the camera meanwhile */ }
-}
-
 // ---- Pre-check: warm up camera + models before the quiz officially starts
 (async function preCheck() {
   const errorEl = document.getElementById('preCheckError');
@@ -59,8 +18,8 @@ async function reshareScreen() {
   try {
     await Proctor.requestCamera(document.getElementById('preCheckVideo'));
     await Proctor.loadModels((msg) => (startBtn.textContent = msg));
-    preCheckReady = true;
-    updateStartButton();
+    startBtn.disabled = false;
+    startBtn.textContent = 'Enable camera & start quiz';
   } catch (e) {
     errorEl.textContent = 'Camera access is required to take a proctored quiz: ' + e.message;
   }
@@ -68,11 +27,6 @@ async function reshareScreen() {
 
 async function beginQuiz() {
   const errorEl = document.getElementById('preCheckError');
-  if (needsScreen && !Proctor.isSharingScreen()) {
-    errorEl.textContent = 'Please share your entire screen first.';
-    updateStartButton();
-    return;
-  }
   try {
     await document.documentElement.requestFullscreen?.();
   } catch (e) { /* some browsers/devices restrict this - continue anyway */ }
@@ -101,10 +55,6 @@ async function beginQuiz() {
     flagAttempt: (field) => api(`/student/attempts/${attempt.id}/flag`, { method: 'POST', body: { field } }).catch(() => {}),
     onFullscreenExit: () => {
       logProctorEvent({ type: 'SYSTEM', meta: {}, timestamp: new Date().toISOString(), note: 'Please return to fullscreen.' });
-    },
-    onScreenShareLost: () => {
-      document.getElementById('screenLost').hidden = false;
-      logProctorEvent({ type: 'SYSTEM', meta: {}, timestamp: new Date().toISOString(), note: 'Screen sharing stopped — please share your screen again.' });
     },
     onCameraLost: () => {
       document.getElementById('camStatus').textContent = 'Camera disconnected!';
@@ -270,36 +220,3 @@ window.addEventListener('beforeunload', (e) => {
     e.returnValue = '';
   }
 });
-
-// ---- Phones / tablets: coming back after switching apps or tabs ------------
-// Mobile browsers pause (or stop) the camera while the quiz page is in the
-// background. When the student comes back we restart the camera preview so
-// detection keeps working, and the first tap puts the quiz back in fullscreen.
-// Laptops are not affected.
-if (!needsScreen) {
-  const resumeCamera = async () => {
-    if (!attempt || document.hidden) return;
-    const v = document.getElementById('proctorVideo');
-    const track = Proctor.getStream()?.getVideoTracks()[0];
-    try {
-      if (!track || track.readyState === 'ended') {
-        await Proctor.requestCamera(v); // camera was stopped by the phone: get it back
-        const cs = document.getElementById('camStatus');
-        cs.textContent = 'Camera active';
-        cs.className = 'cam-status ok';
-      } else if (v.paused) {
-        await v.play();
-      }
-    } catch (e) { /* camera status already shows the problem */ }
-  };
-  document.addEventListener('visibilitychange', resumeCamera);
-  window.addEventListener('pageshow', resumeCamera);
-  window.addEventListener('focus', resumeCamera);
-
-  const reenterFullscreen = () => {
-    if (!attempt || document.fullscreenElement || !document.fullscreenEnabled) return;
-    document.documentElement.requestFullscreen?.().catch(() => {});
-  };
-  document.addEventListener('touchend', reenterFullscreen, { passive: true });
-  document.addEventListener('pointerup', reenterFullscreen, { passive: true });
-}
