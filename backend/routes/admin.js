@@ -336,13 +336,24 @@ router.get('/stats', (req, res) => {
   });
 });
 
-// ==== My Info (college admin) ======================================================
-// The college admin's own account details and their college's details.
+// ==== My Info (college admin and global admin) ======================================
+// The admin's own account details, and their college's (or the platform's) details.
 router.get('/my-info', (req, res) => {
-  if (req.isGlobal) return res.status(400).json({ error: 'My Info is for college admins' });
   const me = db.users.findById(req.user.id);
+  if (!me) return res.status(404).json({ error: 'Not found' });
+  if (req.isGlobal) {
+    return res.json({
+      isGlobal: true,
+      adminId: me.loginId,
+      name: me.name,
+      email: me.email,
+      createdAt: me.createdAt || null,
+      college: null,
+      stats: { colleges: db.colleges.all().length, ...statsFor(null) }
+    });
+  }
   const c = db.colleges.findById(req.collegeId);
-  if (!me || !c) return res.status(404).json({ error: 'Not found' });
+  if (!c) return res.status(404).json({ error: 'Not found' });
   res.json({
     adminId: me.loginId,
     name: me.name,

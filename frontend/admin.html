@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
 <meta name="theme-color" content="#bd0e0e" />
 <link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="css/extras.css?v=1" />
 </head>
 <body>
 <div class="app-shell">
@@ -21,7 +22,7 @@
       <button class="nav-btn" data-view="students">🎓 All Students</button>
       <button class="nav-btn" data-view="restore">♻️ Restore Data</button>
       <button class="nav-btn" data-view="delete">🗑 Delete Data</button>
-      <button class="nav-btn college-only" data-view="info" style="display:none">👤 My Info</button>
+      <button class="nav-btn" data-view="info">👤 My Info</button>
     </nav>
     <div style="margin-top:40px" class="who" id="whoBox"></div>
     <div class="who-college" id="whoCollege"></div>
@@ -156,7 +157,7 @@
       <div id="dResult"></div>
     </section>
 
-    <!-- My Info (college admin only) -->
+    <!-- My Info (college admin and global admin) -->
     <section id="view-info" style="display:none">
       <h2>👤 My Info</h2>
       <div id="infoBox"></div>
@@ -314,6 +315,7 @@
 
 <script src="js/api.js"></script>
 <script src="js/admin.js"></script>
+<script src="js/pw-reset.js"></script>
 <script src="js/admin-info.js"></script>
 <script src="js/layout.js"></script>
 </body>

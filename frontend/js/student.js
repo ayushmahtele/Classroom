@@ -217,8 +217,8 @@ function renderResults() {
     <div class="summary-pill ok"><b>${pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) + '%' : '-'}</b>average</div>
     <div class="summary-pill"><b>${pcts.length ? Math.max(...pcts) + '%' : '-'}</b>best</div>` : '';
   document.getElementById('resultRows').innerHTML = rows.map((r) => `
-    <tr>
-      <td><b>${esc(r.quizTitle)}</b></td>
+    <tr class="rv-row" data-review="/student/results/${encodeURIComponent(r.id)}/review" tabindex="0" title="See your answers">
+      <td><b>${esc(r.quizTitle)}</b> <span class="rv-row-hint">View answers</span></td>
       <td>${esc(r.className || '-')}</td>
       <td>${esc(r.teacherName || '-')}</td>
       <td>${r.score} / ${r.totalMarks}${r.percent !== null ? ` <small style="color:var(--muted)">(${r.percent}%)</small>` : ''}</td>

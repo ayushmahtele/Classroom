@@ -1,4 +1,4 @@
-// "My Info" section for college admins (admin.html).
+// "My Info" section for college admins and the global admin (admin.html).
 // Kept in its own file so nothing inside admin.js had to change.
 (function () {
   const btn = document.querySelector('.nav-btn[data-view="info"]');
@@ -17,7 +17,7 @@
       const p = await api('/admin/my-info');
       const c = p.college;
       const s = p.stats || {};
-      const statusBadge = `<span class="badge ${c.status === 'active' ? 'ok' : 'danger'}">${esc(c.status)}</span>`;
+      const statusBadge = c ? `<span class="badge ${c.status === 'active' ? 'ok' : 'danger'}">${esc(c.status)}</span>` : '';
 
       box.innerHTML = `
         <div class="info-grid">
@@ -27,13 +27,13 @@
               ['Admin ID', `<code>${esc(p.adminId)}</code>`],
               ['Name', esc(p.name)],
               ['Email', esc(p.email)],
-              ['Role', 'College admin'],
+              ['Role', p.isGlobal ? 'Global (platform) admin' : 'College admin'],
               ['Account created', esc(day(p.createdAt))]
             ])}</tbody></table>
             <p class="hint" style="margin-top:12px">Sign in from the <b>Admin</b> tab with your Admin ID or your email.</p>
           </div>
 
-          <div class="panel">
+          ${c ? `<div class="panel">
             <h3 style="margin-top:0">My college</h3>
             <table class="info-table"><tbody>${rowsHtml([
               ['College', esc(c.name)],
@@ -46,40 +46,22 @@
               ['Classes', esc(s.classes ?? 0)],
               ['Quizzes', esc(s.quizzes ?? 0)]
             ])}</tbody></table>
-          </div>
+          </div>` : `<div class="panel">
+            <h3 style="margin-top:0">Platform</h3>
+            <table class="info-table"><tbody>${rowsHtml([
+              ['Colleges', esc(s.colleges ?? 0)],
+              ['Teachers', esc(s.teachers ?? 0)],
+              ['Students', esc(s.students ?? 0)],
+              ['Classes', esc(s.classes ?? 0)],
+              ['Quizzes', esc(s.quizzes ?? 0)]
+            ])}</tbody></table>
+          </div>`}
         </div>
 
-        <div class="panel">
-          <h3 style="margin-top:0">Password</h3>
-          <form id="infoPwForm" class="info-pw">
-            <label>Current password</label><input id="infoPwCurrent" type="password" autocomplete="current-password" required />
-            <label>New password</label><input id="infoPwNew" type="password" minlength="6" autocomplete="new-password" required />
-            <label>Confirm new password</label><input id="infoPwConfirm" type="password" minlength="6" autocomplete="new-password" required />
-            <div class="row" style="margin-top:14px"><button class="btn" type="submit">Change password</button></div>
-            <div class="error-msg" id="infoPwMsg"></div>
-          </form>
-          <p class="hint" style="margin-top:6px">Forgot your current password? Log out and use <b>Forgot password?</b> on the sign-in page —
-            a 6-digit code will be sent to <b>${esc(p.email)}</b>.</p>
-        </div>`;
+        <div class="panel" id="infoPwPanel"></div>`;
 
-      document.getElementById('infoPwForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const msg = document.getElementById('infoPwMsg');
-        msg.style.color = '';
-        msg.textContent = '';
-        const cur = document.getElementById('infoPwCurrent').value;
-        const nw = document.getElementById('infoPwNew').value;
-        if (nw.length < 6) { msg.textContent = 'New password must be at least 6 characters.'; return; }
-        if (nw !== document.getElementById('infoPwConfirm').value) { msg.textContent = 'New passwords do not match.'; return; }
-        try {
-          await api('/auth/change-password', { method: 'POST', body: { currentPassword: cur, newPassword: nw } });
-          e.target.reset();
-          msg.style.color = 'var(--ok)';
-          msg.textContent = 'Password changed.';
-        } catch (err) {
-          msg.textContent = err.message;
-        }
-      });
+      // Change password, or reset it with a code sent to the account email
+      renderPasswordPanel(document.getElementById('infoPwPanel'), { email: p.email });
     } catch (err) {
       box.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
     }

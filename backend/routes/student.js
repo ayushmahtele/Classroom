@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { authRequired, requireRole } = require('../middleware/auth');
 const { id } = require('../utils/helpers');
+const { buildReview } = require('../utils/review');
 
 // Case/spacing-insensitive match against any accepted answer ("a|b|c"); numbers compare numerically (2 == 2.0)
 function normAnswer(v) { return String(v).trim().toLowerCase().replace(/\s+/g, ' '); }
@@ -270,6 +271,25 @@ router.get('/results', (req, res) => {
   }
   rows.sort((x, y) => String(y.submittedAt).localeCompare(String(x.submittedAt)));
   res.json(rows);
+});
+
+// Question-by-question review of one of my submitted attempts.
+// Right / wrong is shown straight away. The correct answers are shown once the
+// quiz has closed (its end time has passed), so they can't be passed on to
+// classmates who are still taking it. A quiz without an end time shows them
+// straight away.
+router.get('/results/:id/review', (req, res) => {
+  const attempt = db.attempts.findById(req.params.id);
+  if (!attempt || attempt.studentId !== req.user.id || !attempt.submittedAt) {
+    return res.status(404).json({ error: 'Result not found' });
+  }
+  const quiz = db.quizzes.findById(attempt.quizId);
+  if (!quiz) return res.status(404).json({ error: 'This quiz no longer exists' });
+  const closesAt = quiz.endTime ? new Date(quiz.endTime) : null;
+  const revealCorrect = !closesAt || closesAt <= new Date();
+  const review = buildReview(quiz, attempt, { revealCorrect });
+  review.revealAt = revealCorrect ? null : quiz.endTime;
+  res.json(review);
 });
 
 // Attendance with class and teacher name, newest first.

@@ -5,6 +5,7 @@ const { authRequired, requireRole } = require('../middleware/auth');
 const recycle = require('../utils/recycle');
 const { id, tempPassword, uniqueLoginId, DEPARTMENTS, teacherDepartments, studentVisibleTo } = require('../utils/helpers');
 const { assignRollNumber } = require('../utils/college');
+const { buildReview } = require('../utils/review');
 
 const router = express.Router();
 router.use(authRequired, requireRole('teacher'));
@@ -435,6 +436,18 @@ router.get('/quizzes/:id/results', (req, res) => {
     return { ...a, studentName: student?.name, studentRoll: student?.rollNumber };
   });
   res.json(withNames);
+});
+
+// Question-by-question review of one student's attempt on one of my quizzes.
+router.get('/attempts/:id/review', (req, res) => {
+  const attempt = db.attempts.findById(req.params.id);
+  const quiz = attempt && db.quizzes.findById(attempt.quizId);
+  if (!attempt || !quiz || quiz.teacherId !== req.user.id) return res.status(404).json({ error: 'Attempt not found' });
+  const review = buildReview(quiz, attempt, { revealCorrect: true });
+  const info = studentInfo(attempt.studentId);
+  review.studentName = info.studentName;
+  review.studentRoll = info.studentRoll;
+  res.json(review);
 });
 
 // ---- Attendance ---------------------------------------------------------------

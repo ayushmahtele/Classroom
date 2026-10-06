@@ -34,53 +34,10 @@ async function loadProfile(role) {
         ${classList}
       </div>
 
-      <div class="panel">
-        <h3 style="margin-top:0">Password</h3>
-        <form id="pwForm" style="max-width:360px">
-          <label>Current password</label><input id="pwCurrent" type="password" required />
-          <label>New password</label><input id="pwNew" type="password" minlength="6" required />
-          <label>Confirm new password</label><input id="pwConfirm" type="password" minlength="6" required />
-          <div class="row" style="margin-top:14px"><button class="btn" type="submit">Change password</button></div>
-          <div class="error-msg" id="pwMsg"></div>
-        </form>
-        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0" />
-        <p style="font-size:13px;color:var(--muted);margin:0 0 10px">
-          Forgot your current password? Send a reset request to your ${role === 'teacher' ? 'admin' : 'teacher/admin'}.
-          They will give you a new temporary password.
-        </p>
-        <button class="btn secondary" type="button" id="pwForgotBtn">Forgot password — request reset</button>
-        <div id="pwForgotMsg" style="font-size:13px;margin-top:8px"></div>
-      </div>`;
+      <div class="panel" id="pwPanel"></div>`;
 
-    document.getElementById('pwForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const msg = document.getElementById('pwMsg');
-      msg.style.color = '';
-      msg.textContent = '';
-      const cur = document.getElementById('pwCurrent').value;
-      const nw = document.getElementById('pwNew').value;
-      if (nw !== document.getElementById('pwConfirm').value) { msg.textContent = 'New passwords do not match.'; return; }
-      try {
-        await api('/auth/change-password', { method: 'POST', body: { currentPassword: cur, newPassword: nw } });
-        e.target.reset();
-        msg.style.color = 'var(--ok)';
-        msg.textContent = 'Password changed.';
-      } catch (err) {
-        msg.textContent = err.message;
-      }
-    });
-
-    document.getElementById('pwForgotBtn').addEventListener('click', async () => {
-      const out = document.getElementById('pwForgotMsg');
-      try {
-        await api('/auth/request-reset', { method: 'POST' });
-        out.style.color = 'green';
-        out.textContent = `Reset request sent to your ${role === 'teacher' ? 'admin' : 'teacher/admin'}. Ask them for your new temporary password.`;
-      } catch (err) {
-        out.style.color = '';
-        out.textContent = err.message;
-      }
-    });
+    // Change password, or reset it with a code sent to the account email
+    renderPasswordPanel(document.getElementById('pwPanel'), { email: p.email });
   } catch (err) {
     box.innerHTML = `<p class="error-msg">${pfEsc(err.message)}</p>`;
   }

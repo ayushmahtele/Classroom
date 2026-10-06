@@ -696,8 +696,8 @@ function renderResults() {
     <div class="summary-pill"><b>${pct.length ? Math.round(Math.min(...pct)) + '%' : '-'}</b>lowest</div>
     <div class="summary-pill warn"><b>${resultsCache.filter((r) => r.status === 'auto-submitted').length}</b>auto-submitted</div>` : '';
   document.getElementById('resultRows').innerHTML = rows.map((r) => `
-    <tr>
-      <td>${escapeHtml(r.studentName || r.studentId)}</td>
+    <tr class="rv-row" data-review="/teacher/attempts/${encodeURIComponent(r.id)}/review" tabindex="0" title="See this student's answers">
+      <td>${escapeHtml(r.studentName || r.studentId)} <span class="rv-row-hint">View answers</span></td>
       <td><b>${escapeHtml(r.studentRoll || '-')}</b></td>
       <td>${r.score ?? '-'} / ${r.totalMarks}</td>
       <td><span class="badge ${r.status === 'submitted' ? 'ok' : r.status === 'auto-submitted' ? 'warn' : 'muted'}">${escapeHtml(r.status)}</span></td>

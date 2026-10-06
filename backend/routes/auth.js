@@ -242,26 +242,24 @@ function resolveResetAccount(req, res) {
   return { user, by };
 }
 
-router.post('/forgot-password/send-code', async (req, res) => {
-  if (ipLimited(req)) return res.status(429).json({ error: 'Too many requests. Try again in a while.' });
-  const found = resolveResetAccount(req, res);
-  if (!found) return;
-  const { user } = found;
-
+// Emails a fresh 6-digit code to the account. Answers { status, body }.
+// Used by the sign-in page and by "Forgot your current password?" inside
+// the dashboard.
+async function issueResetCode(user) {
   const blocked = blockedReason(user);
-  if (blocked) return res.status(403).json({ error: blocked });
-  if (!user.email) return res.status(400).json({ error: 'This account has no email attached. Ask your teacher/admin to reset your password.' });
-  if (!isMailConfigured()) return res.status(503).json({ error: 'Password reset by email is not set up on this server yet. Ask your teacher/admin to reset your password.' });
+  if (blocked) return { status: 403, body: { error: blocked } };
+  if (!user.email) return { status: 400, body: { error: 'This account has no email attached. Ask your teacher/admin to reset your password.' } };
+  if (!isMailConfigured()) return { status: 503, body: { error: 'Password reset by email is not set up on this server yet. Ask your teacher/admin to reset your password.' } };
 
   const now = Date.now();
   const prev = await db.passwordResets.get(user.id);
   if (prev?.lastSentAt && now - prev.lastSentAt < RESEND_SECONDS * 1000) {
     const wait = Math.ceil((RESEND_SECONDS * 1000 - (now - prev.lastSentAt)) / 1000);
-    return res.status(429).json({ error: `Please wait ${wait}s before asking for a new code.`, retryAfter: wait });
+    return { status: 429, body: { error: `Please wait ${wait}s before asking for a new code.`, retryAfter: wait } };
   }
   const sends = (prev?.sends || []).filter((t) => now - t < 60 * 60 * 1000);
   if (sends.length >= MAX_SENDS_PER_HOUR) {
-    return res.status(429).json({ error: 'Too many codes asked for this account. Try again in an hour.' });
+    return { status: 429, body: { error: 'Too many codes asked for this account. Try again in an hour.' } };
   }
 
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
@@ -282,8 +280,7 @@ router.post('/forgot-password/send-code', async (req, res) => {
 
   // Send the email. If it finishes within a few seconds we report the real
   // result; if the email service is just slow to confirm (Apps Script often
-  // is), we move the user on to the code screen and let it finish in the
-  // background. "Resend code" is there if it never arrives.
+  // is), we move the user on and let it finish in the background.
   const mail = resetCodeEmail({ name: user.name, code, role: user.role, minutes: CODE_MINUTES });
   const sending = sendMail({ to: user.email, ...mail }).then(
     () => ({ ok: true }),
@@ -296,13 +293,44 @@ router.post('/forgot-password/send-code', async (req, res) => {
     console.error('Reset code email failed:', result.err.message);
     // undo, so the user can try again straight away
     await db.passwordResets.update(user.id, { codeHash: null, lastSentAt: prev?.lastSentAt || 0, sends });
-    return res.status(502).json({ error: 'Could not send the email right now. Please try again in a minute.' });
+    return { status: 502, body: { error: 'Could not send the email right now. Please try again in a minute.' } };
   }
   if (!result) {
     sending.then((r) => { if (!r.ok) console.error('Reset code email failed (background):', r.err.message); });
   }
+  return { status: 200, body: { ok: true, maskedEmail: maskEmail(user.email), expiresInMinutes: CODE_MINUTES, resendAfter: RESEND_SECONDS } };
+}
 
-  res.json({ ok: true, maskedEmail: maskEmail(user.email), expiresInMinutes: CODE_MINUTES, resendAfter: RESEND_SECONDS });
+// Checks a 6-digit code and uses it up. Answers { ok } or { status, error }.
+async function checkResetCode(user, rawCode) {
+  const code = String(rawCode || '').replace(/\D/g, '');
+  if (code.length !== 6) return { status: 400, error: 'Enter the 6-digit code from the email' };
+  const rec = await db.passwordResets.get(user.id);
+  if (!rec?.codeHash) return { status: 400, error: 'No active code for this account. Send a new code.' };
+  if (Date.now() > rec.expiresAt) {
+    await db.passwordResets.update(user.id, { codeHash: null });
+    return { status: 400, error: 'This code has expired. Send a new code.' };
+  }
+  if (!sameHash(rec.codeHash, codeHash(user.id, code))) {
+    const attempts = (rec.attempts || 0) + 1;
+    if (attempts >= MAX_ATTEMPTS) {
+      await db.passwordResets.update(user.id, { codeHash: null, attempts });
+      return { status: 400, error: 'Too many wrong tries. Send a new code.' };
+    }
+    await db.passwordResets.update(user.id, { attempts });
+    const left = MAX_ATTEMPTS - attempts;
+    return { status: 400, error: `Wrong code. ${left} ${left === 1 ? 'try' : 'tries'} left.` };
+  }
+  await db.passwordResets.update(user.id, { codeHash: null });
+  return { ok: true };
+}
+
+router.post('/forgot-password/send-code', async (req, res) => {
+  if (ipLimited(req)) return res.status(429).json({ error: 'Too many requests. Try again in a while.' });
+  const found = resolveResetAccount(req, res);
+  if (!found) return;
+  const r = await issueResetCode(found.user);
+  res.status(r.status).json(r.body);
 });
 
 router.post('/forgot-password/verify-code', async (req, res) => {
@@ -310,34 +338,42 @@ router.post('/forgot-password/verify-code', async (req, res) => {
   const found = resolveResetAccount(req, res);
   if (!found) return;
   const { user } = found;
-  const code = String(req.body?.code || '').replace(/\D/g, '');
-  if (code.length !== 6) return res.status(400).json({ error: 'Enter the 6-digit code from the email' });
-
-  const rec = await db.passwordResets.get(user.id);
-  if (!rec?.codeHash) return res.status(400).json({ error: 'No active code for this account. Send a new code.' });
-  if (Date.now() > rec.expiresAt) {
-    await db.passwordResets.update(user.id, { codeHash: null });
-    return res.status(400).json({ error: 'This code has expired. Send a new code.' });
-  }
-  if (!sameHash(rec.codeHash, codeHash(user.id, code))) {
-    const attempts = (rec.attempts || 0) + 1;
-    if (attempts >= MAX_ATTEMPTS) {
-      await db.passwordResets.update(user.id, { codeHash: null, attempts });
-      return res.status(400).json({ error: 'Too many wrong tries. Send a new code.' });
-    }
-    await db.passwordResets.update(user.id, { attempts });
-    const left = MAX_ATTEMPTS - attempts;
-    return res.status(400).json({ error: `Wrong code. ${left} ${left === 1 ? 'try' : 'tries'} left.` });
-  }
+  const check = await checkResetCode(user, req.body?.code);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
 
   // Correct: the code is used up and swapped for a one-time reset token.
   const resetToken = crypto.randomBytes(32).toString('hex');
   await db.passwordResets.update(user.id, {
-    codeHash: null,
     tokenHash: sha256(resetToken),
     tokenExpiresAt: Date.now() + RESET_TOKEN_MINUTES * 60 * 1000
   });
   res.json({ ok: true, resetToken });
+});
+
+// ---- "Forgot your current password?" inside the dashboard ------------------
+// For a signed-in student / teacher / college admin / global admin who doesn't
+// remember their current password: a 6-digit code goes to their own email,
+// then they set a new password with that code (no current password needed).
+router.post('/me/send-reset-code', authRequired, async (req, res) => {
+  const user = db.users.findById(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const r = await issueResetCode(user);
+  res.status(r.status).json(r.body);
+});
+
+router.post('/me/reset-with-code', authRequired, async (req, res) => {
+  const user = db.users.findById(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const { code, newPassword } = req.body || {};
+  if (!newPassword || String(newPassword).length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  }
+  const check = await checkResetCode(user, code);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  const passwordHash = await bcrypt.hash(String(newPassword), 10);
+  await db.users.update(user.id, { passwordHash, mustChangePassword: false, resetRequested: null });
+  await db.passwordResets.remove(user.id);
+  res.json({ ok: true });
 });
 
 router.post('/forgot-password/reset', async (req, res) => {
