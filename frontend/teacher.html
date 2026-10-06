@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
 <meta name="theme-color" content="#bd0e0e" />
 <link rel="stylesheet" href="css/style.css" />
-<link rel="stylesheet" href="css/extras.css?v=2" />
+<link rel="stylesheet" href="css/extras.css?v=3" />
 </head>
 <body>
 <div class="app-shell">
@@ -95,7 +95,7 @@
         </div>
         <p class="hint" id="attSheetHint" style="margin:0 0 10px"></p>
         <table>
-          <thead><tr><th>Roll No.</th><th>Student</th><th>Status</th></tr></thead>
+          <thead><tr><th class="att-check-cell"><input type="checkbox" id="attCheckAll" checked aria-label="Mark everyone present" title="Tick all = everyone present, untick = everyone absent" /></th><th>Roll No.</th><th>Student</th><th>Status</th></tr></thead>
           <tbody id="attRows"></tbody>
         </table>
         <div class="att-quick">

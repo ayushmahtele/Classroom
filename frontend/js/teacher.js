@@ -724,7 +724,7 @@ async function loadAttendanceView() {
   });
   if (classesCache.length) onAttClassChange();
   else {
-    document.getElementById('attRows').innerHTML = '<tr><td colspan="3" style="color:var(--muted)">Create a class first.</td></tr>';
+    document.getElementById('attRows').innerHTML = '<tr><td colspan="4" style="color:var(--muted)">Create a class first.</td></tr>';
     document.getElementById('attHistoryRows').innerHTML = '';
   }
 }
@@ -751,7 +751,8 @@ function renderAttendanceSheet() {
     : '';
   document.getElementById('attRows').innerHTML = students.map((s) => {
     const st = saved[s.id] || 'present';
-    return `<tr>
+    return `<tr class="${st === 'absent' ? 'att-absent' : ''}">
+      <td class="att-check-cell"><input type="checkbox" class="att-check" data-student="${s.id}" ${st !== 'absent' ? 'checked' : ''} aria-label="${escapeHtml(s.name)} attended" /></td>
       <td><b>${escapeHtml(s.rollNumber || '-')}</b></td>
       <td>${escapeHtml(s.name)}</td>
       <td>
@@ -762,11 +763,42 @@ function renderAttendanceSheet() {
         </select>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="3" style="color:var(--muted)">No students enrolled in this class.</td></tr>';
+  }).join('') || '<tr><td colspan="4" style="color:var(--muted)">No students enrolled in this class.</td></tr>';
+  syncAttChecks();
 }
 function markAll(status) {
   document.querySelectorAll('.att-status').forEach((sel) => { sel.value = status; });
+  syncAttChecks();
 }
+// Checkbox on the left of each student: ticked = attended (Present or Late),
+// unticked = Absent. It stays in step with the Status dropdown both ways.
+function syncAttChecks() {
+  const sels = [...document.querySelectorAll('.att-status')];
+  sels.forEach((sel) => {
+    const box = document.querySelector(`.att-check[data-student="${sel.dataset.student}"]`);
+    if (box) box.checked = sel.value !== 'absent';
+    sel.closest('tr')?.classList.toggle('att-absent', sel.value === 'absent');
+  });
+  const all = document.getElementById('attCheckAll');
+  if (all) {
+    const on = sels.filter((sel) => sel.value !== 'absent').length;
+    all.checked = sels.length > 0 && on === sels.length;
+    all.indeterminate = on > 0 && on < sels.length;
+    all.disabled = sels.length === 0;
+  }
+}
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.classList?.contains('att-check')) {
+    const sel = document.querySelector(`.att-status[data-student="${t.dataset.student}"]`);
+    if (sel) sel.value = t.checked ? (sel.value === 'absent' ? 'present' : sel.value) : 'absent';
+    syncAttChecks();
+  } else if (t.classList?.contains('att-status')) {
+    syncAttChecks();
+  } else if (t.id === 'attCheckAll') {
+    markAll(t.checked ? 'present' : 'absent');
+  }
+});
 async function submitAttendance() {
   const classId = document.getElementById('attClassSelect').value;
   const date = document.getElementById('attDate').value;

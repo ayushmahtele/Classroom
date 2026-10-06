@@ -136,3 +136,19 @@ body.rv-open { overflow: hidden; }
 }
 .pw-show:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .pw-form + .pw-explain, .panel > .pw-explain { max-width: 520px; }
+
+/* ===== Teacher attendance: tick box on the left (ticked = attended) ===== */
+.att-check-cell { width: 44px; text-align: center; }
+.att-check-cell input[type=checkbox],
+.att-check-cell input#attCheckAll {
+  width: 20px; height: 20px; margin: 0; padding: 0; accent-color: var(--primary); cursor: pointer; vertical-align: middle;
+}
+#attRows tr.att-absent td { background: #fff6f6; }
+#attRows tr.att-absent .att-status { color: var(--danger); font-weight: 600; }
+@media (max-width: 700px) {
+  /* phone card: the tick box sits at the top-left of each student's card */
+  #attRows td.att-check-cell { width: auto; justify-content: flex-start; }
+  #attRows td.att-check-cell::before { content: 'Attended'; display: block; }
+  #attRows td.att-check-cell input[type=checkbox] { width: 24px; height: 24px; margin-left: auto; }
+  #attRows tr.att-absent { border-color: #f3c1c4; }
+}
