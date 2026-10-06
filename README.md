@@ -147,3 +147,22 @@ detection, and copy/paste/right-click blocking — all implemented here.
 For stricter lockdown you'd add a dedicated secure-browser client on top
 of this same backend; the API already supports that (it doesn't care
 what UI reports the proctoring events).
+
+
+## Sign in with email or ID, and forgot password by email code
+
+- Students, teachers, college admins and the global admin can sign in with
+  either their **Student / Teacher / Admin ID** (such as `STU2048`, `TCH1024`, `ADM1024`,
+  `ADMIN001`) or the **email attached to their account**. Only accounts of the
+  selected tab can sign in from it. If nothing matches, the page shows e.g.
+  *"No teacher account exists that is associated with you@mail.com"*; if the
+  account belongs to another tab it shows *"That account is registered as
+  student, not teacher. Choose the right tab."*
+- **Forgot password?** (just below the Student / Teacher / Admin tabs): the user
+  picks their Student/Teacher/Admin ID or Email, a 6-digit code is emailed to the account's registered
+  address (shown masked, e.g. `ay*********e@g****.com`), they enter the code and
+  choose a new password. Codes expire after 10 minutes, allow 5 wrong tries, can
+  be resent after 60 s, and are stored hashed in the `passwordResets` collection.
+- Configure email in `backend/.env` (see `.env.example`): `BREVO_API_KEY`
+  (HTTPS — recommended on Render) or `SMTP_*`, plus `MAIL_FROM`. If neither is
+  set, users can still use "Ask your teacher/admin for a reset".

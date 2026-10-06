@@ -426,3 +426,109 @@ td.actions { white-space: nowrap; }
   .quiz-main > .row.between:last-child { margin: 16px -24px 0 !important; padding-left: 24px; padding-right: 24px; grid-template-columns: 1fr 1fr 1.2fr; }
   .quiz-main > .row.between:last-child .btn.danger { grid-column: auto; }
 }
+
+/* ===================== Sign-in page: email/SUID login + forgot password ===================== */
+.auth-card { max-width: 400px; }
+.auth-card .role-tabs { margin-bottom: 8px; }
+.auth-card .role-tabs button { padding: 10px 0; font-weight: 600; transition: background .15s, color .15s, border-color .15s; }
+.auth-card .role-tabs button:focus-visible,
+.auth-card .seg button:focus-visible,
+.auth-card .link-btn:focus-visible,
+.auth-card .pw-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.auth-card input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(74, 93, 249, .15); }
+
+.forgot-row { display: flex; justify-content: flex-end; margin: 0 0 4px; font-size: 13px; }
+.forgot-row a { font-weight: 600; padding: 4px 0; }
+.forgot-row a:hover { text-decoration: underline; }
+
+.ok-msg { color: var(--ok); font-size: 13px; margin-top: 4px; }
+.ok-msg:empty { display: none; }
+
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 64px; }
+.pw-toggle {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  border: none; background: transparent; color: var(--primary);
+  font-size: 12px; font-weight: 600; padding: 6px 8px; cursor: pointer; border-radius: 6px;
+}
+
+#forgotView[hidden], #loginView[hidden], .forgot-row[hidden], #forgotView form[hidden] { display: none; }
+.fp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0 6px; }
+.fp-head h2 { font-size: 17px; margin: 0; }
+.fp-steps { display: flex; gap: 5px; flex: 0 0 auto; }
+.fp-steps span { width: 18px; height: 4px; border-radius: 4px; background: var(--border); transition: background .2s; }
+.fp-steps span.on { background: var(--primary); }
+.fp-text { font-size: 13px; color: var(--muted); margin: 6px 0 12px; line-height: 1.5; }
+.fp-text strong { color: var(--text); word-break: break-all; }
+
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; }
+.seg button { border: none; background: transparent; padding: 8px 0; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.seg button.active { background: #fff; color: var(--primary); box-shadow: 0 1px 3px rgba(28, 34, 48, .12); }
+
+.otp { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.otp input {
+  width: 100%; min-width: 0; aspect-ratio: 1 / 1.15; padding: 0;
+  text-align: center; font-size: 22px; font-weight: 700; border-radius: 10px;
+}
+.otp input.filled { border-color: var(--primary); background: #f6f7ff; }
+
+.fp-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; margin-top: 4px; }
+.link-btn { border: none; background: none; color: var(--primary); font-size: 13px; font-weight: 600; padding: 4px 0; cursor: pointer; }
+.link-btn:disabled { color: var(--muted); cursor: default; font-weight: 500; }
+.link-btn:not(:disabled):hover { text-decoration: underline; }
+.fp-back { display: block; margin: 14px auto 0; color: var(--muted); }
+.fp-fallback { margin-top: 10px; line-height: 1.5; }
+
+/* phones */
+@media (max-width: 480px) {
+  .auth-screen { align-items: flex-start; padding: 24px 14px calc(24px + env(safe-area-inset-bottom)); }
+  .auth-card { padding: 22px 18px; }
+  .auth-card h1.login-title { font-size: 24px; }
+  .auth-card .login-logo img { width: 64px; height: 64px; }
+  .auth-card input { font-size: 16px; } /* stops iOS from zooming into the field */
+  .auth-card button.btn.full { padding: 13px 16px; font-size: 15px; }
+  .otp { gap: 6px; }
+  .otp input { font-size: 20px; }
+  .fp-links { flex-direction: column; align-items: flex-start; }
+}
+/* very small phones (320px) */
+@media (max-width: 340px) {
+  .auth-card { padding: 18px 12px; }
+  .auth-card .role-tabs { gap: 5px; }
+  .auth-card .role-tabs button { font-size: 12px; }
+  .otp { gap: 4px; }
+}
+/* tablets and laptops: a bit more room */
+@media (min-width: 768px) {
+  .auth-card { max-width: 420px; padding: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-card * { transition: none !important; }
+}
+
+/* ===================== Admin: My Info (college admin) ===================== */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.info-grid > .panel { margin-bottom: 0; }
+.info-grid + .panel { margin-top: 20px; }
+.info-table { background: transparent; }
+.info-table td { padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
+.info-table tr:last-child td { border-bottom: none; }
+.info-table td.info-key { width: 42%; color: var(--muted); padding-right: 12px; }
+.info-table td b { word-break: break-word; }
+.info-pw { max-width: 380px; }
+@media (max-width: 900px) {
+  .info-grid { grid-template-columns: 1fr; gap: 16px; }
+  .info-grid + .panel { margin-top: 16px; }
+}
+@media (max-width: 700px) {
+  /* keep key | value rows instead of the phone "card per row" table style */
+  .main table.info-table tr { background: transparent; border: none; border-radius: 0; margin: 0; padding: 0; border-bottom: 1px solid var(--border); }
+  .main table.info-table tr:last-child { border-bottom: none; }
+  .main table.info-table td { display: table-cell; width: auto; border: none; padding: 9px 0; font-size: 14px; text-align: right; }
+  .main table.info-table tr { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+  .main table.info-table td.info-key { text-align: left; flex: 0 0 auto; width: auto; }
+  .main table.info-table td + td { border-top: none; }
+  .main table.info-table td::before { display: none; }
+  .info-pw { max-width: none; }
+  .info-pw input { font-size: 16px; }
+}

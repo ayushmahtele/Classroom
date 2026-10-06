@@ -336,6 +336,29 @@ router.get('/stats', (req, res) => {
   });
 });
 
+// ==== My Info (college admin) ======================================================
+// The college admin's own account details and their college's details.
+router.get('/my-info', (req, res) => {
+  if (req.isGlobal) return res.status(400).json({ error: 'My Info is for college admins' });
+  const me = db.users.findById(req.user.id);
+  const c = db.colleges.findById(req.collegeId);
+  if (!me || !c) return res.status(404).json({ error: 'Not found' });
+  res.json({
+    adminId: me.loginId,
+    name: me.name,
+    email: me.email,
+    createdAt: me.createdAt || null,
+    college: {
+      name: c.name,
+      shortName: c.shortName,
+      status: c.status || 'active',
+      createdAt: c.createdAt || null,
+      nextRollNumber: `${c.shortName}${(Number(c.rollCounter) || 0) + 1}`
+    },
+    stats: statsFor(req.collegeId)
+  });
+});
+
 // ==== Students ======================================================================
 // Admin creates a student, gives it a domain and chooses which teachers (of the
 // student's college) get it:

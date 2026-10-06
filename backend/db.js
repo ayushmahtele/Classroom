@@ -82,6 +82,11 @@ async function connect() {
   await mongoDb.collection('trash').createIndex({ teacherId: 1 });
   await mongoDb.collection('trash').createIndex({ collegeId: 1 });
 
+  // Forgot-password codes: one record per user, removed automatically by
+  // MongoDB a while after it expires.
+  await mongoDb.collection('passwordResets').createIndex({ userId: 1 }, { unique: true });
+  await mongoDb.collection('passwordResets').createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
+
   console.log('Connected to MongoDB Atlas and loaded data into memory cache.');
 }
 
@@ -160,6 +165,23 @@ const trash = {
   }
 };
 
+// Forgot-password codes (hashed). Kept out of the users collection so the
+// code hash can never leak through any API that returns user records.
+const passwordResets = {
+  async get(userId) {
+    return stripMongoId(await mongoDb.collection('passwordResets').findOne({ userId }));
+  },
+  async set(userId, rec) {
+    await mongoDb.collection('passwordResets').updateOne({ userId }, { $set: { userId, ...rec } }, { upsert: true });
+  },
+  async update(userId, patch) {
+    await mongoDb.collection('passwordResets').updateOne({ userId }, { $set: patch });
+  },
+  async remove(userId) {
+    await mongoDb.collection('passwordResets').deleteOne({ userId });
+  }
+};
+
 function makeCollection(name) {
   return {
     all() {
@@ -218,6 +240,7 @@ module.exports = {
   restoreEvidence,
   deleteEvidence,
   trash,
+  passwordResets,
   colleges: makeCollection('colleges'),
   users: makeCollection('users'),
   classes: makeCollection('classes'),

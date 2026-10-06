@@ -11,57 +11,156 @@
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-<div class="center-screen">
-  <div class="card login-card">
+<div class="center-screen auth-screen">
+  <div class="card login-card auth-card">
     <div class="login-logo"><img src="img/logo.png" alt="Classroom logo" /></div>
     <h1 class="login-title">Classroom</h1>
     <p class="sub center">Smart proctored quizzes — sign in from any device, anywhere.</p>
 
-    <div class="role-tabs">
-      <button class="active" data-role="student">Student</button>
-      <button data-role="teacher">Teacher</button>
-      <button data-role="admin">Admin</button>
+    <div class="role-tabs" role="tablist" aria-label="Account type">
+      <button class="active" data-role="student" type="button">Student</button>
+      <button data-role="teacher" type="button">Teacher</button>
+      <button data-role="admin" type="button">Admin</button>
     </div>
 
-    <form id="loginForm">
-      <label id="loginIdLabel">Student ID or Email</label>
-      <input id="loginId" type="text" placeholder="e.g. STU2048 or you@email.com" required />
+    <!-- Forgot password: just below the Student / Teacher / Admin tabs -->
+    <div class="forgot-row" id="forgotRow">
+      <a href="#" id="forgotLink">Forgot password?</a>
+    </div>
 
-      <label>Password</label>
-      <input id="password" type="password" placeholder="••••••••" required />
+    <!-- ===== Sign in ===== -->
+    <section id="loginView">
+      <form id="loginForm" novalidate>
+        <label for="loginId" id="loginIdLabel">Student ID or Email</label>
+        <input id="loginId" type="text" placeholder="e.g. STU2048 or you@email.com" autocomplete="username" autocapitalize="none" spellcheck="false" required />
 
-      <button class="btn full" type="submit">Sign in</button>
-      <div class="error-msg" id="errorMsg"></div>
-    </form>
-    <p class="hint">Forgot your password? <a href="#" id="forgotLink">Request a reset</a> — your teacher/admin will give you a new temporary password.</p>
-    <div id="forgotMsg" style="font-size:13px;margin-top:6px"></div>
+        <label for="password">Password</label>
+        <div class="pw-wrap">
+          <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+          <button type="button" class="pw-toggle" data-for="password" aria-label="Show password">Show</button>
+        </div>
+
+        <button class="btn full" type="submit" id="loginBtn">Sign in</button>
+        <div class="error-msg" id="errorMsg" role="alert"></div>
+        <div class="ok-msg" id="okMsg" role="status"></div>
+      </form>
+    </section>
+
+    <!-- ===== Forgot password (3 steps) ===== -->
+    <section id="forgotView" hidden>
+      <div class="fp-head">
+        <h2 id="fpTitle">Reset student password</h2>
+        <div class="fp-steps" aria-hidden="true"><span class="on"></span><span></span><span></span></div>
+      </div>
+
+      <!-- Step 1: Student/Teacher/Admin ID or email -->
+      <form id="fpStep1" novalidate>
+        <p class="fp-text">We'll email a 6-digit code to the address attached to your account. Find your account by:</p>
+        <div class="seg" role="radiogroup" aria-label="Find account by">
+          <button type="button" class="active" data-by="id" role="radio" aria-checked="true" id="segIdBtn">Student ID</button>
+          <button type="button" data-by="email" role="radio" aria-checked="false">Email</button>
+        </div>
+        <label for="fpId" id="fpIdLabel">Your Student ID</label>
+        <input id="fpId" type="text" placeholder="e.g. STU2048" autocapitalize="none" spellcheck="false" />
+        <button class="btn full" type="submit" id="fpSendBtn">Send code</button>
+        <div class="error-msg" id="fpErr1" role="alert"></div>
+        <p class="hint fp-fallback">No access to that email? <a href="#" id="fpAskAdmin">Ask your teacher/admin for a reset</a></p>
+      </form>
+
+      <!-- Step 2: enter the code -->
+      <form id="fpStep2" hidden novalidate>
+        <p class="fp-text">Code sent to <strong id="fpMasked"></strong>. It expires in <span id="fpMins">10</span> minutes.</p>
+        <label>6-digit code</label>
+        <div class="otp" id="otpBoxes">
+          <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Digit 1" />
+          <input inputmode="numeric" maxlength="1" aria-label="Digit 2" />
+          <input inputmode="numeric" maxlength="1" aria-label="Digit 3" />
+          <input inputmode="numeric" maxlength="1" aria-label="Digit 4" />
+          <input inputmode="numeric" maxlength="1" aria-label="Digit 5" />
+          <input inputmode="numeric" maxlength="1" aria-label="Digit 6" />
+        </div>
+        <button class="btn full" type="submit" id="fpVerifyBtn">Verify code</button>
+        <div class="error-msg" id="fpErr2" role="alert"></div>
+        <div class="fp-links">
+          <button type="button" class="link-btn" id="fpResend" disabled>Resend code</button>
+          <button type="button" class="link-btn" id="fpChange">Use a different ID or email</button>
+        </div>
+      </form>
+
+      <!-- Step 3: new password -->
+      <form id="fpStep3" hidden novalidate>
+        <p class="fp-text">Code verified. Choose a new password (at least 6 characters).</p>
+        <label for="fpNew">New password</label>
+        <div class="pw-wrap">
+          <input id="fpNew" type="password" minlength="6" autocomplete="new-password" />
+          <button type="button" class="pw-toggle" data-for="fpNew" aria-label="Show password">Show</button>
+        </div>
+        <label for="fpConfirm">Confirm new password</label>
+        <input id="fpConfirm" type="password" minlength="6" autocomplete="new-password" />
+        <button class="btn full" type="submit" id="fpSaveBtn">Save new password</button>
+        <div class="error-msg" id="fpErr3" role="alert"></div>
+      </form>
+
+      <button type="button" class="link-btn fp-back" id="fpBack">Back to sign in</button>
+    </section>
   </div>
 </div>
 
 <script src="js/api.js"></script>
 <script>
 let role = 'student';
-const labels = { student: 'Student ID or Email', teacher: 'Teacher ID or Email', admin: 'Admin ID or Email' };
+const $ = (id) => document.getElementById(id);
+const roleName = { student: 'Student', teacher: 'Teacher', admin: 'Admin' };
+const idExample = { student: 'STU2048', teacher: 'TCH1024', admin: 'ADM1024' };
 
+// ---------- role tabs ----------
 document.querySelectorAll('.role-tabs button').forEach((btn) => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.role-tabs button').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     role = btn.dataset.role;
-    document.getElementById('loginIdLabel').textContent = labels[role];
-    document.getElementById('errorMsg').textContent = '';
+    applyRoleText();
+    $('errorMsg').textContent = '';
+    $('okMsg').textContent = '';
+    // switching account type mid-reset starts the reset again for that type
+    if (!$('forgotView').hidden) showFpStep(1);
   });
 });
 
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const loginId = document.getElementById('loginId').value.trim();
-  const password = document.getElementById('password').value;
-  const errorMsg = document.getElementById('errorMsg');
-  errorMsg.textContent = '';
+function applyRoleText() {
+  $('loginIdLabel').textContent = `${roleName[role]} ID or Email`;
+  $('segIdBtn').textContent = `${roleName[role]} ID`;
+  $('loginId').placeholder = `e.g. ${idExample[role]} or you@email.com`;
+  $('fpTitle').textContent = `Reset ${role} password`;
+  applyByText();
+}
 
+// ---------- show / hide password ----------
+document.querySelectorAll('.pw-toggle').forEach((t) => {
+  t.addEventListener('click', () => {
+    const input = $(t.dataset.for);
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    t.textContent = show ? 'Hide' : 'Show';
+    t.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  });
+});
+
+// ---------- sign in (Student/Teacher/Admin ID or email) ----------
+$('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const loginId = $('loginId').value.trim();
+  const password = $('password').value;
+  const errorMsg = $('errorMsg');
+  errorMsg.textContent = '';
+  $('okMsg').textContent = '';
+  if (!loginId) { errorMsg.textContent = `Enter your ${roleName[role]} ID or email.`; return; }
+  if (!password) { errorMsg.textContent = 'Enter your password.'; return; }
+
+  const btn = $('loginBtn');
+  btn.disabled = true;
   try {
-    const data = await api('/auth/login', { method: 'POST', body: { loginId, password } });
+    const data = await api('/auth/login', { method: 'POST', body: { loginId, password, role } });
     if (data.user.role !== role) {
       errorMsg.textContent = `That account is registered as ${data.user.role}, not ${role}. Choose the right tab.`;
       return;
@@ -75,20 +174,217 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     window.location.href = `${data.user.role}.html`;
   } catch (err) {
     errorMsg.textContent = err.message;
+  } finally {
+    btn.disabled = false;
   }
 });
 
-document.getElementById('forgotLink').addEventListener('click', async (e) => {
+// ---------- forgot password ----------
+let fpBy = 'id';
+let fpIdentifier = '';
+let fpResetToken = '';
+let resendTimer = null;
+
+function openForgot() {
+  $('loginView').hidden = true;
+  $('forgotRow').hidden = true;
+  $('forgotView').hidden = false;
+  // carry over what was typed on the sign-in form
+  const typed = $('loginId').value.trim();
+  if (typed) { setBy(typed.includes('@') ? 'email' : 'id'); $('fpId').value = typed; }
+  showFpStep(1);
+}
+function closeForgot() {
+  clearInterval(resendTimer);
+  fpResetToken = '';
+  $('forgotView').hidden = true;
+  $('loginView').hidden = false;
+  $('forgotRow').hidden = false;
+}
+$('forgotLink').addEventListener('click', (e) => { e.preventDefault(); openForgot(); });
+$('fpBack').addEventListener('click', closeForgot);
+$('fpChange').addEventListener('click', () => showFpStep(1));
+
+function showFpStep(n) {
+  [1, 2, 3].forEach((i) => { $('fpStep' + i).hidden = i !== n; $('fpErr' + i).textContent = ''; });
+  document.querySelectorAll('.fp-steps span').forEach((s, i) => s.classList.toggle('on', i < n));
+  if (n === 1) { clearInterval(resendTimer); fpResetToken = ''; setTimeout(() => $('fpId').focus(), 0); }
+  if (n === 2) { clearOtp(); setTimeout(() => otpInputs[0].focus(), 0); }
+  if (n === 3) { $('fpNew').value = ''; $('fpConfirm').value = ''; setTimeout(() => $('fpNew').focus(), 0); }
+}
+
+// ID / Email choice
+document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => { setBy(b.dataset.by); $('fpId').value = ''; $('fpId').focus(); }));
+function setBy(by) {
+  fpBy = by;
+  document.querySelectorAll('.seg button').forEach((b) => {
+    const on = b.dataset.by === by;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  applyByText();
+  $('fpErr1').textContent = '';
+}
+function applyByText() {
+  const input = $('fpId');
+  if (fpBy === 'email') {
+    $('fpIdLabel').textContent = `Email attached to your ${role} account`;
+    input.type = 'email';
+    input.placeholder = 'you@email.com';
+    input.autocomplete = 'email';
+  } else {
+    $('fpIdLabel').textContent = `Your ${roleName[role]} ID`;
+    input.type = 'text';
+    input.placeholder = `e.g. ${idExample[role]}`;
+    input.autocomplete = 'username';
+  }
+}
+
+async function sendCode() {
+  const r = await api('/auth/forgot-password/send-code', { method: 'POST', body: { role, by: fpBy, identifier: fpIdentifier } });
+  $('fpMasked').textContent = r.maskedEmail;
+  $('fpMins').textContent = r.expiresInMinutes;
+  startResendCountdown(r.resendAfter || 60);
+}
+
+$('fpStep1').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const out = document.getElementById('forgotMsg');
-  const loginId = document.getElementById('loginId').value.trim();
-  if (!loginId) { out.style.color = ''; out.textContent = 'Enter your ID or email above first.'; return; }
+  const err = $('fpErr1');
+  err.textContent = '';
+  fpIdentifier = $('fpId').value.trim();
+  if (!fpIdentifier) { err.textContent = fpBy === 'email' ? 'Enter your email.' : `Enter your ${roleName[role]} ID.`; return; }
+  if (fpBy === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fpIdentifier)) { err.textContent = 'Enter a valid email address.'; return; }
+  const btn = $('fpSendBtn');
+  btn.disabled = true; btn.textContent = 'Sending…';
   try {
-    const r = await api('/auth/forgot-password', { method: 'POST', body: { loginId } });
-    out.style.color = 'green';
-    out.textContent = r.message;
-  } catch (err) { out.style.color = ''; out.textContent = err.message; }
+    await sendCode();
+    showFpStep(2);
+  } catch (ex) {
+    err.textContent = ex.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Send code';
+  }
 });
+
+function startResendCountdown(sec) {
+  clearInterval(resendTimer);
+  const b = $('fpResend');
+  let left = sec;
+  const tick = () => {
+    if (left <= 0) { clearInterval(resendTimer); b.disabled = false; b.textContent = 'Resend code'; return; }
+    b.disabled = true; b.textContent = `Resend code in ${left}s`; left--;
+  };
+  tick();
+  resendTimer = setInterval(tick, 1000);
+}
+$('fpResend').addEventListener('click', async () => {
+  $('fpErr2').textContent = '';
+  $('fpResend').disabled = true;
+  try {
+    await sendCode();
+    clearOtp(); otpInputs[0].focus();
+    toast('A new code has been sent');
+  } catch (ex) {
+    $('fpErr2').textContent = ex.message;
+    const m = /wait (\d+)s/.exec(ex.message);
+    if (m) startResendCountdown(+m[1]); else $('fpResend').disabled = false;
+  }
+});
+
+// 6 OTP boxes: auto-advance, backspace, arrow keys, paste whole code
+const otpInputs = [...document.querySelectorAll('#otpBoxes input')];
+const otpValue = () => otpInputs.map((i) => i.value).join('');
+function clearOtp() { otpInputs.forEach((i) => { i.value = ''; i.classList.remove('filled'); }); }
+function fillOtp(digits, from = 0) {
+  digits.split('').forEach((d, k) => { const box = otpInputs[from + k]; if (box) { box.value = d; box.classList.add('filled'); } });
+  const next = otpInputs[Math.min(from + digits.length, 5)];
+  next.focus();
+  if (otpValue().length === 6) $('fpStep2').requestSubmit();
+}
+otpInputs.forEach((inp, idx) => {
+  inp.addEventListener('input', () => {
+    const digits = inp.value.replace(/\D/g, '');
+    inp.value = '';
+    inp.classList.remove('filled');
+    if (digits) fillOtp(digits.slice(0, 6 - idx), idx);
+  });
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Backspace' && !inp.value && idx > 0) { otpInputs[idx - 1].value = ''; otpInputs[idx - 1].classList.remove('filled'); otpInputs[idx - 1].focus(); e.preventDefault(); }
+    if (e.key === 'ArrowLeft' && idx > 0) otpInputs[idx - 1].focus();
+    if (e.key === 'ArrowRight' && idx < 5) otpInputs[idx + 1].focus();
+  });
+  inp.addEventListener('paste', (e) => {
+    const digits = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+    if (!digits) return;
+    e.preventDefault();
+    clearOtp();
+    fillOtp(digits.slice(0, 6), 0);
+  });
+  inp.addEventListener('focus', () => inp.select());
+});
+
+let verifying = false;
+$('fpStep2').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (verifying) return;
+  const err = $('fpErr2');
+  err.textContent = '';
+  const code = otpValue();
+  if (code.length !== 6) { err.textContent = 'Enter all 6 digits of the code.'; return; }
+  const btn = $('fpVerifyBtn');
+  verifying = true; btn.disabled = true; btn.textContent = 'Checking…';
+  try {
+    const r = await api('/auth/forgot-password/verify-code', { method: 'POST', body: { role, by: fpBy, identifier: fpIdentifier, code } });
+    fpResetToken = r.resetToken;
+    clearInterval(resendTimer);
+    showFpStep(3);
+  } catch (ex) {
+    err.textContent = ex.message;
+    clearOtp(); otpInputs[0].focus();
+  } finally {
+    verifying = false; btn.disabled = false; btn.textContent = 'Verify code';
+  }
+});
+
+$('fpStep3').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('fpErr3');
+  err.textContent = '';
+  const pw = $('fpNew').value;
+  if (pw.length < 6) { err.textContent = 'New password must be at least 6 characters.'; return; }
+  if (pw !== $('fpConfirm').value) { err.textContent = 'Passwords do not match.'; return; }
+  const btn = $('fpSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    await api('/auth/forgot-password/reset', { method: 'POST', body: { role, by: fpBy, identifier: fpIdentifier, resetToken: fpResetToken, newPassword: pw } });
+    closeForgot();
+    $('loginId').value = fpIdentifier;
+    $('password').value = '';
+    $('errorMsg').textContent = '';
+    $('okMsg').textContent = 'Password updated. Sign in with your new password.';
+    $('password').focus();
+  } catch (ex) {
+    err.textContent = ex.message;
+    if (/start again/i.test(ex.message)) setTimeout(() => showFpStep(1), 1800);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save new password';
+  }
+});
+
+// Old fallback: ask the teacher/admin to issue a temporary password
+$('fpAskAdmin').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const err = $('fpErr1');
+  const id = $('fpId').value.trim();
+  if (!id) { err.textContent = fpBy === 'email' ? 'Enter your email above first.' : `Enter your ${roleName[role]} ID above first.`; return; }
+  try {
+    const r = await api('/auth/forgot-password', { method: 'POST', body: { loginId: id } });
+    err.textContent = '';
+    toast(r.message);
+  } catch (ex) { err.textContent = ex.message; }
+});
+
+applyRoleText();
 </script>
 </body>
 </html>

@@ -21,6 +21,7 @@
       <button class="nav-btn" data-view="students">🎓 All Students</button>
       <button class="nav-btn" data-view="restore">♻️ Restore Data</button>
       <button class="nav-btn" data-view="delete">🗑 Delete Data</button>
+      <button class="nav-btn college-only" data-view="info" style="display:none">👤 My Info</button>
     </nav>
     <div style="margin-top:40px" class="who" id="whoBox"></div>
     <div class="who-college" id="whoCollege"></div>
@@ -153,6 +154,12 @@
         </div>
       </div>
       <div id="dResult"></div>
+    </section>
+
+    <!-- My Info (college admin only) -->
+    <section id="view-info" style="display:none">
+      <h2>👤 My Info</h2>
+      <div id="infoBox"></div>
     </section>
 
   </div>
@@ -307,6 +314,7 @@
 
 <script src="js/api.js"></script>
 <script src="js/admin.js"></script>
+<script src="js/admin-info.js"></script>
 <script src="js/layout.js"></script>
 </body>
 </html>
