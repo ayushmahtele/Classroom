@@ -212,12 +212,20 @@ const Proctor = (() => {
   let screenVideo = null;
   let screenShots = 0;
 
+  // Laptop / desktop only. Anything touch-first (phones, tablets, Android or
+  // iPad in "desktop site" mode, Chromebooks in tablet mode) returns false and
+  // keeps the original camera-photo behaviour with no screen sharing at all.
   function isLaptop() {
     const ua = navigator.userAgent || '';
+    const mq = (q) => !!(window.matchMedia && window.matchMedia(q).matches);
     if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') return false;
     if (navigator.userAgentData?.mobile) return false;
-    if (/Android|iPhone|iPad|iPod|Mobile|Silk|Kindle/i.test(ua)) return false;
-    if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return false; // iPad in desktop mode
+    if (/android|ios|ipados/i.test(navigator.userAgentData?.platform || '')) return false;
+    if (/Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle|PlayBook|BB10/i.test(ua)) return false;
+    if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return false; // iPad asking for desktop site
+    if (/X11; Linux/.test(ua) && navigator.maxTouchPoints > 0) return false; // Android asking for desktop site
+    // main pointer must be a mouse / trackpad that can hover (not a finger)
+    if (!mq('(pointer: fine)') || !mq('(hover: hover)')) return false;
     return true;
   }
 
@@ -298,13 +306,16 @@ const Proctor = (() => {
     if (onset && type === 'FULLSCREEN_EXIT') cfg.flagAttempt?.('fullscreenExits');
 
     try {
-      const { blob, capture } = await captureEvidence(type);
+      // Laptop sharing its screen + TAB_SWITCH -> screenshot. Everything else
+      // (all phones/tablets, all other events) -> camera photo, exactly as before.
+      const shot = type === 'TAB_SWITCH' && isSharingScreen() ? await captureEvidence(type) : null;
+      const blob = shot ? shot.blob : await captureEvidenceBlob();
       const form = new FormData();
       form.append('attemptId', cfg.attemptId);
       form.append('quizId', cfg.quizId);
       form.append('type', type);
       if (confidence != null) form.append('confidence', String(confidence));
-      form.append('meta', JSON.stringify({ ...(meta || {}), capture }));
+      form.append('meta', JSON.stringify(shot ? { ...(meta || {}), capture: shot.capture } : (meta || {})));
       if (blob) form.append('evidence', blob, 'evidence.jpg');
       await api('/proctor/events', { method: 'POST', body: form, isForm: true });
     } catch (e) {
@@ -525,7 +536,7 @@ const Proctor = (() => {
       return stream;
     },
     isLaptop() {
-      return isLaptop();
+      try { return isLaptop(); } catch (e) { return false; }
     },
     async requestScreen() {
       return requestScreen();

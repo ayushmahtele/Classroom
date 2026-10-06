@@ -12,12 +12,17 @@ let deadline = null;
 // ---- Laptop / desktop: share the entire screen before starting -----------
 // (phones and tablets can't share their screen; they skip this step)
 let preCheckReady = false;
-const needsScreen = Proctor.isLaptop();
+const needsScreen = typeof Proctor.isLaptop === 'function' && Proctor.isLaptop();
 if (needsScreen) document.getElementById('screenStep').hidden = false;
 
 function updateStartButton() {
   const startBtn = document.getElementById('startBtn');
   if (!preCheckReady) return;
+  if (!needsScreen) { // phones / tablets: exactly as before
+    startBtn.disabled = false;
+    startBtn.textContent = 'Enable camera & start quiz';
+    return;
+  }
   const ok = !needsScreen || Proctor.isSharingScreen();
   startBtn.disabled = !ok;
   startBtn.textContent = ok ? 'Enable camera & start quiz' : 'Share your screen to start';
@@ -265,3 +270,36 @@ window.addEventListener('beforeunload', (e) => {
     e.returnValue = '';
   }
 });
+
+// ---- Phones / tablets: coming back after switching apps or tabs ------------
+// Mobile browsers pause (or stop) the camera while the quiz page is in the
+// background. When the student comes back we restart the camera preview so
+// detection keeps working, and the first tap puts the quiz back in fullscreen.
+// Laptops are not affected.
+if (!needsScreen) {
+  const resumeCamera = async () => {
+    if (!attempt || document.hidden) return;
+    const v = document.getElementById('proctorVideo');
+    const track = Proctor.getStream()?.getVideoTracks()[0];
+    try {
+      if (!track || track.readyState === 'ended') {
+        await Proctor.requestCamera(v); // camera was stopped by the phone: get it back
+        const cs = document.getElementById('camStatus');
+        cs.textContent = 'Camera active';
+        cs.className = 'cam-status ok';
+      } else if (v.paused) {
+        await v.play();
+      }
+    } catch (e) { /* camera status already shows the problem */ }
+  };
+  document.addEventListener('visibilitychange', resumeCamera);
+  window.addEventListener('pageshow', resumeCamera);
+  window.addEventListener('focus', resumeCamera);
+
+  const reenterFullscreen = () => {
+    if (!attempt || document.fullscreenElement || !document.fullscreenEnabled) return;
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  };
+  document.addEventListener('touchend', reenterFullscreen, { passive: true });
+  document.addEventListener('pointerup', reenterFullscreen, { passive: true });
+}
