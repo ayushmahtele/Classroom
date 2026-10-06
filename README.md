@@ -164,5 +164,10 @@ what UI reports the proctoring events).
   choose a new password. Codes expire after 10 minutes, allow 5 wrong tries, can
   be resent after 60 s, and are stored hashed in the `passwordResets` collection.
 - Configure email in `backend/.env` (see `.env.example`): `BREVO_API_KEY`
-  (HTTPS — recommended on Render) or `SMTP_*`, plus `MAIL_FROM`. If neither is
+  (HTTPS), `GAS_MAIL_URL` + `GAS_MAIL_SECRET` (free Google Apps Script mailer from your own Gmail — see `backend/apps-script/mailer.gs`), or `SMTP_*`, plus `MAIL_FROM`. If neither is
   set, users can still use "Ask your teacher/admin for a reset".
+- **Continue with Google** (just below the Student / Teacher / Admin tabs):
+  signs in the account whose email matches the user's Google/Gmail address.
+  Set `GOOGLE_CLIENT_ID` (an OAuth "Web application" client ID from Google
+  Cloud Console, with your site URL as an authorized JavaScript origin). If it
+  is not set, the button is hidden.

@@ -429,7 +429,7 @@ td.actions { white-space: nowrap; }
 
 /* ===================== Sign-in page: email/SUID login + forgot password ===================== */
 .auth-card { max-width: 400px; }
-.auth-card .role-tabs { margin-bottom: 8px; }
+.auth-card .role-tabs { margin-bottom: 14px; }
 .auth-card .role-tabs button { padding: 10px 0; font-weight: 600; transition: background .15s, color .15s, border-color .15s; }
 .auth-card .role-tabs button:focus-visible,
 .auth-card .seg button:focus-visible,
@@ -437,7 +437,7 @@ td.actions { white-space: nowrap; }
 .auth-card .pw-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .auth-card input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(74, 93, 249, .15); }
 
-.forgot-row { display: flex; justify-content: flex-end; margin: 0 0 4px; font-size: 13px; }
+.forgot-row { display: flex; justify-content: center; margin: 12px 0 0; font-size: 13px; }
 .forgot-row a { font-weight: 600; padding: 4px 0; }
 .forgot-row a:hover { text-decoration: underline; }
 
@@ -532,3 +532,11 @@ td.actions { white-space: nowrap; }
   .info-pw { max-width: none; }
   .info-pw input { font-size: 16px; }
 }
+
+/* Sign in with Google (login page) */
+.google-box[hidden] { display: none; }
+.google-box { margin: 4px 0 2px; }
+.google-btn { width: 100%; min-height: 44px; display: flex; justify-content: center; }
+.google-btn > div { max-width: 100%; }
+.or-divider { display: flex; align-items: center; gap: 10px; margin: 16px 0 2px; color: var(--muted); font-size: 12px; }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }

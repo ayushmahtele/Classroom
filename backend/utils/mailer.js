@@ -7,8 +7,13 @@
  *     where outgoing SMTP ports are blocked). Free tier, no domain needed:
  *     just verify your sender address (e.g. your Gmail) in Brevo.
  *
- *  2) SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS  (e.g. Gmail with an
- *     App Password: smtp.gmail.com, port 465).
+ *  2) GAS_MAIL_URL + GAS_MAIL_SECRET  (free, no other service needed): a small
+ *     Google Apps Script web app that sends the email from YOUR Gmail over
+ *     HTTPS, so it works on Render's free plan. Script + steps:
+ *     backend/apps-script/mailer.gs  (limit: about 100 emails a day).
+ *
+ *  3) SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS  (e.g. Gmail with an
+ *     App Password: smtp.gmail.com, port 465). Often blocked on free hosts.
  *
  * MAIL_FROM is the address the email comes from, e.g.
  *   MAIL_FROM="Classroom <yourname@gmail.com>"
@@ -28,6 +33,7 @@ function parseFrom() {
 
 function mailMode() {
   if (process.env.BREVO_API_KEY) return 'brevo';
+  if (process.env.GAS_MAIL_URL && process.env.GAS_MAIL_SECRET) return 'gas';
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return 'smtp';
   if (String(process.env.MAIL_DEV_LOG).toLowerCase() === 'true') return 'console';
   return null;
@@ -44,7 +50,11 @@ function smtpTransport() {
       host: process.env.SMTP_HOST,
       port,
       secure: port === 465,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      // fail fast (instead of hanging ~2 minutes) if the host blocks SMTP
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000
     });
   }
   return transporter;
@@ -67,12 +77,30 @@ async function sendMail({ to, subject, text, html }) {
   if (mode === 'brevo') {
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
+      signal: AbortSignal.timeout(20000),
       headers: { 'api-key': process.env.BREVO_API_KEY, 'Content-Type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({ sender: from, to: [{ email: to }], subject, textContent: text, htmlContent: html })
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new Error(`Brevo send failed (${res.status}) ${body}`);
+    }
+    return;
+  }
+
+  if (mode === 'gas') {
+    const res = await fetch(process.env.GAS_MAIL_URL, {
+      method: 'POST',
+      redirect: 'follow', // Apps Script answers through a redirect
+      signal: AbortSignal.timeout(25000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: process.env.GAS_MAIL_SECRET, to, subject, text, html, name: from.name })
+    });
+    const raw = await res.text();
+    let out = null;
+    try { out = JSON.parse(raw); } catch (_) { /* not JSON */ }
+    if (!res.ok || !out || !out.ok) {
+      throw new Error(`Apps Script send failed (${res.status}) ${out ? out.error : raw.slice(0, 200)}`);
     }
     return;
   }

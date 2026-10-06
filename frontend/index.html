@@ -23,9 +23,11 @@
       <button data-role="admin" type="button">Admin</button>
     </div>
 
-    <!-- Forgot password: just below the Student / Teacher / Admin tabs -->
-    <div class="forgot-row" id="forgotRow">
-      <a href="#" id="forgotLink">Forgot password?</a>
+    <!-- Sign in with Google: just below the Student / Teacher / Admin tabs
+         (shown only when GOOGLE_CLIENT_ID is set on the server) -->
+    <div class="google-box" id="googleBox" hidden>
+      <div class="google-btn" id="googleBtn"></div>
+      <div class="or-divider"><span>or sign in with your ID</span></div>
     </div>
 
     <!-- ===== Sign in ===== -->
@@ -41,6 +43,10 @@
         </div>
 
         <button class="btn full" type="submit" id="loginBtn">Sign in</button>
+        <!-- Forgot password: just below the Sign in button -->
+        <div class="forgot-row" id="forgotRow">
+          <a href="#" id="forgotLink">Forgot password?</a>
+        </div>
         <div class="error-msg" id="errorMsg" role="alert"></div>
         <div class="ok-msg" id="okMsg" role="status"></div>
       </form>
@@ -188,6 +194,7 @@ let resendTimer = null;
 function openForgot() {
   $('loginView').hidden = true;
   $('forgotRow').hidden = true;
+  $('googleBox').hidden = true;
   $('forgotView').hidden = false;
   // carry over what was typed on the sign-in form
   const typed = $('loginId').value.trim();
@@ -200,6 +207,7 @@ function closeForgot() {
   $('forgotView').hidden = true;
   $('loginView').hidden = false;
   $('forgotRow').hidden = false;
+  if (googleReady) { $('googleBox').hidden = false; renderGoogleBtn(true); }
 }
 $('forgotLink').addEventListener('click', (e) => { e.preventDefault(); openForgot(); });
 $('fpBack').addEventListener('click', closeForgot);
@@ -384,7 +392,70 @@ $('fpAskAdmin').addEventListener('click', async (e) => {
   } catch (ex) { err.textContent = ex.message; }
 });
 
+// ---------- Sign in with Google (Gmail attached to the account) ----------
+let googleReady = false;
+let googleBtnWidth = 0;
+
+async function initGoogle() {
+  let cfg;
+  try { cfg = await api('/auth/google-config'); } catch { return; }
+  if (!cfg || !cfg.clientId) return; // not set up on the server: no button
+  const script = document.createElement('script');
+  script.src = 'https://accounts.google.com/gsi/client';
+  script.async = true;
+  script.defer = true;
+  script.onload = () => {
+    google.accounts.id.initialize({
+      client_id: cfg.clientId,
+      callback: onGoogleCredential,
+      ux_mode: 'popup',
+      context: 'signin',
+      auto_select: false,
+      cancel_on_tap_outside: true
+    });
+    googleReady = true;
+    if ($('forgotView').hidden) $('googleBox').hidden = false;
+    renderGoogleBtn(true);
+  };
+  document.head.appendChild(script);
+}
+
+// Google's button needs a pixel width, so it is redrawn when the card resizes.
+function renderGoogleBtn(force) {
+  if (!googleReady || $('googleBox').hidden) return;
+  const box = $('googleBtn');
+  const width = Math.round(Math.max(200, Math.min(400, box.clientWidth || 300)));
+  if (!force && width === googleBtnWidth) return;
+  googleBtnWidth = width;
+  box.innerHTML = '';
+  google.accounts.id.renderButton(box, {
+    type: 'standard', theme: 'outline', size: 'large', text: 'continue_with',
+    shape: 'rectangular', logo_alignment: 'center', width
+  });
+}
+let resizeT = null;
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => renderGoogleBtn(false), 150); });
+
+async function onGoogleCredential(resp) {
+  const errorMsg = $('errorMsg');
+  errorMsg.textContent = '';
+  $('okMsg').textContent = '';
+  try {
+    const data = await api('/auth/google', { method: 'POST', body: { credential: resp.credential, role } });
+    Session.token = data.token;
+    Session.user = data.user;
+    if (data.mustChangePassword) {
+      window.location.href = 'change-password.html';
+      return;
+    }
+    window.location.href = `${data.user.role}.html`;
+  } catch (err) {
+    errorMsg.textContent = err.message;
+  }
+}
+
 applyRoleText();
+initGoogle();
 </script>
 </body>
 </html>

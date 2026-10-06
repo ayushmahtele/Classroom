@@ -78,6 +78,67 @@ router.post('/login', async (req, res) => {
   });
 });
 
+// ---- Sign in with Google -------------------------------------------------
+// The login page shows a "Sign in with Google" button when GOOGLE_CLIENT_ID is
+// set. Google gives the browser a signed ID token; we verify it here and sign
+// in the account whose email matches the Google (Gmail) address.
+// (Statuses used here are never 401, so the login page doesn't reload.)
+let googleClient = null;
+function getGoogleClient() {
+  if (!googleClient) {
+    const { OAuth2Client } = require('google-auth-library');
+    googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  }
+  return googleClient;
+}
+
+router.get('/google-config', (req, res) => {
+  res.json({ clientId: process.env.GOOGLE_CLIENT_ID || null });
+});
+
+router.post('/google', async (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).json({ error: 'Google sign-in is not set up on this server.' });
+  const role = ROLES.includes(req.body?.role) ? req.body.role : null;
+  const credential = req.body?.credential;
+  if (!credential) return res.status(400).json({ error: 'Google sign-in failed. Please try again.' });
+
+  let info;
+  try {
+    const ticket = await getGoogleClient().verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
+    info = ticket.getPayload();
+  } catch (err) {
+    console.error('Google token check failed:', err.message);
+    return res.status(400).json({ error: 'Google sign-in failed. Please try again.' });
+  }
+  const email = String(info?.email || '').trim();
+  if (!email || info.email_verified === false) {
+    return res.status(400).json({ error: 'Your Google account email is not verified.' });
+  }
+
+  const user = findAccount(null, email, 'email');
+  if (!user) {
+    return res.status(404).json({ error: role ? noAccountMessage(role, email, 'email') : `No account exists that is associated with ${email}` });
+  }
+  if (role && user.role !== role) {
+    return res.status(403).json({ error: `That account is registered as ${user.role}, not ${role}. Choose the right tab.` });
+  }
+  const blocked = blockedReason(user);
+  if (blocked) return res.status(403).json({ error: blocked });
+
+  const payload = {
+    id: user.id,
+    role: user.role,
+    name: user.name,
+    loginId: user.loginId,
+    email: user.email,
+    collegeId: user.collegeId || null
+  };
+  const token = jwt.sign(payload, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '12h'
+  });
+  res.json({ token, user: payload, mustChangePassword: !!user.mustChangePassword });
+});
+
 router.get('/me', authRequired, (req, res) => {
   const user = db.users.findById(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
